@@ -1,0 +1,31 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# JavaScript
+node_modules/
+.npm-cache/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/web-build/
+apps/mobile/coverage/
+apps/backend/.private-media/
+apps/backend/.media/
+
+# Python
+.venv/
+.pip-cache/
+__pycache__/
+*.py[cod]
+*.sqlite3
+celerybeat-schedule*
+.pytest_cache/
+htmlcov/
+
+# Runtime and editor files
+.runtime/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

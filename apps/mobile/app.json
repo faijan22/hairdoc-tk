@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "HairDoc TK",
+    "slug": "hairdoc-tk",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "hairdoctk",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hairdoctk.app"
+    },
+    "android": {
+      "package": "com.hairdoctk.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F3EC"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "HairDoc TK uses selected photos only for your private consultation.",
+          "cameraPermission": "HairDoc TK uses the camera only when you choose to take a private consultation photo.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
