@@ -133,6 +133,22 @@ class ConsultationApiTests(APITestCase):
         )
         self.assertEqual(case.response.questionnaire.version, 1)
 
+    def test_staff_account_cannot_start_a_client_consultation(self):
+        staff = User.objects.create_user(
+            "tk@example.com",
+            "HairDoc!2026Strong",
+            is_email_verified=True,
+            is_staff=True,
+        )
+        self.authorize(staff, "TK phone")
+        response = self.start()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["error"]["details"]["account"],
+            ["Staff accounts cannot start client consultations."],
+        )
+        self.assertFalse(ConsultationCase.objects.filter(client=staff).exists())
+
     def test_answers_are_typed_user_scoped_and_locked_after_completion(self):
         case_id = self.start().json()["public_id"]
         answers_url = reverse("consultations:answers", kwargs={"public_id": case_id})

@@ -232,6 +232,7 @@ export function ConsultationPhotosScreen() {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const auth = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   const [category, setCategory] = useState<ConsultationPhotoCategory>("FRONT");
   const [uploadStatus, setUploadStatus] = useState("");
   const [failedAsset, setFailedAsset] = useState<UploadAsset | null>(null);
@@ -241,7 +242,7 @@ export function ConsultationPhotosScreen() {
   const photos = useQuery({
     queryKey: ["consultations", caseId, "photos"],
     queryFn: () => getConsultationPhotos(caseId),
-    enabled: auth === "authenticated" && Boolean(caseId),
+    enabled: auth === "authenticated" && !user?.is_staff && Boolean(caseId),
   });
   const upload = useMutation({
     mutationFn: (asset: UploadAsset) =>
@@ -325,6 +326,7 @@ export function ConsultationPhotosScreen() {
   if (!caseId) return <Redirect href={"/consult" as Href} />;
   if (auth === "bootstrapping") return <LoadingIndicator />;
   if (auth !== "authenticated") return <Redirect href="/auth/sign-in" />;
+  if (user?.is_staff) return <Redirect href="/staff/consultations" />;
   const overview = photos.data;
   return (
     <Screen contentStyle={{ gap: theme.spacing.xl }}>

@@ -48,6 +48,8 @@ def _questionnaire_is_ready(questionnaire) -> bool:
 
 @transaction.atomic
 def start_consultation(client, service_public_id, timezone_name: str):
+    if client.is_staff:
+        raise IntakeError({"account": ["Staff accounts cannot start client consultations."]})
     try:
         ZoneInfo(timezone_name)
     except (ZoneInfoNotFoundError, ValueError):

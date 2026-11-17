@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { Href, Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Pressable, TextInput, View } from "react-native";
+import { Pressable, type TextInputInstance, View } from "react-native";
 import { z } from "zod";
 
 import { AuthShell } from "./AuthShell";
@@ -29,7 +29,7 @@ export function SignInScreen() {
   const theme = useTheme();
   const status = useAuthStore((state) => state.status);
   const signIn = useAuthStore((state) => state.signIn);
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const {
     control,
@@ -144,7 +144,7 @@ export function SignInScreen() {
           {errors.root.message}
         </Text>
       ) : null}
-      <Button loading={isSubmitting} onPress={submit}>
+      <Button loading={isSubmitting} onPress={() => void submit()}>
         Sign in
       </Button>
       <View

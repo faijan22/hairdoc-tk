@@ -1,0 +1,16 @@
+.git
+.gitignore
+.codex_tmp
+.runtime
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/.env.*
+!**/.env.example
+apps/mobile
+apps/backend/.private-media
+apps/backend/.media
+apps/backend/db.sqlite3
+apps/backend/celerybeat-schedule*
+

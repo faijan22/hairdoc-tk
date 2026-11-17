@@ -84,8 +84,10 @@ function bookingError(error: unknown) {
 
 function Guard({ children }: { children: React.ReactNode }) {
   const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   if (status === "bootstrapping") return <LoadingIndicator />;
   if (status !== "authenticated") return <Redirect href="/auth/sign-in" />;
+  if (user?.is_staff) return <Redirect href="/staff/appointments" />;
   return children;
 }
 
@@ -425,7 +427,7 @@ export function BookingReviewScreen() {
               ? "The original time is kept until this new slot is accepted by the server."
               : isFree
                 ? "This consultation has no charge. Your appointment will be confirmed immediately—no card or checkout required."
-                : "The server reserves this time while you complete Square's secure checkout. Your appointment is confirmed only after verified payment."}
+                : "The server reserves this time while you complete Stripe's secure checkout. Your appointment is confirmed only after verified payment."}
           </Text>
           {mutation.isError ? (
             <Text color="danger">{bookingError(mutation.error)}</Text>
@@ -583,7 +585,7 @@ export function AppointmentDetailScreen() {
                           item.data.reservation_expires_at,
                         ).toLocaleString()
                       : "soon"}
-                    . Complete Square checkout to confirm it.
+                    . Complete Stripe checkout to confirm it.
                   </Text>
                   <Button
                     onPress={() =>

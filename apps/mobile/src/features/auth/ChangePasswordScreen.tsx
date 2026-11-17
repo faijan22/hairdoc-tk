@@ -55,7 +55,7 @@ export function ChangePasswordScreen() {
         <TextField label="Confirm new password" autoComplete="new-password" secureTextEntry value={field.value} onBlur={field.onBlur} onChangeText={field.onChange} error={errors.confirm_password?.message} />
       )} />
       {errors.root?.message ? <Text variant="caption" color="danger">{errors.root.message}</Text> : null}
-      <Button loading={isSubmitting} onPress={submit}>Change password</Button>
+      <Button loading={isSubmitting} onPress={() => void submit()}>Change password</Button>
     </AuthShell>
   );
 }

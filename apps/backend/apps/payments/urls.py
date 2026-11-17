@@ -7,7 +7,7 @@ from .views import (
     PaymentListView,
     StaffPaymentDetailView,
     StaffPaymentListView,
-    SquareWebhookView,
+    StripeWebhookView,
     payment_return_cancel,
     payment_return_success,
 )
@@ -23,5 +23,5 @@ urlpatterns = [
     path("staff/payments/<uuid:public_id>/", StaffPaymentDetailView.as_view(), name="staff-payment-detail"),
     path("payments/return/success/", payment_return_success, name="return-success"),
     path("payments/return/cancel/", payment_return_cancel, name="return-cancel"),
-    path("integrations/square/webhook/", SquareWebhookView.as_view(), name="square-webhook"),
+    path("integrations/stripe/webhook/", StripeWebhookView.as_view(), name="stripe-webhook"),
 ]

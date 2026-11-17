@@ -232,6 +232,7 @@ function SavedFeedback({ children }: PropsWithChildren) {
 export function SettingsHomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const isStaff = Boolean(user?.is_staff);
   const preferences = useQuery({
     queryKey: ["settings", "preferences"],
     queryFn: getNotificationPreferences,
@@ -240,26 +241,56 @@ export function SettingsHomeScreen() {
     <SettingsPage title="Settings">
       <View style={{ gap: 4 }}>
         <Text variant="overline" color="accent">
-          YOUR PRIVATE SPACE
+          {isStaff ? "TK WORKSPACE" : "YOUR PRIVATE SPACE"}
         </Text>
         <Text color="muted">
-          Manage what HairDoc TK knows and how we reach you.
+          {isStaff
+            ? "Manage your professional account and client-care workspace."
+            : "Manage what HairDoc TK knows and how we reach you."}
         </Text>
       </View>
-      <SettingsSection title="Your profile">
+      <SettingsSection title={isStaff ? "Your account" : "Your profile"}>
         <SettingsRow
           icon="user"
           label="Personal details"
           value={user?.first_name || "Add details"}
           onPress={() => router.push("/settings/personal")}
+          last={isStaff}
         />
-        <SettingsRow
-          icon="activity"
-          label="Hair profile"
-          onPress={() => router.push("/settings/hair-profile")}
-          last
-        />
+        {!isStaff ? (
+          <SettingsRow
+            icon="activity"
+            label="Hair profile"
+            onPress={() => router.push("/settings/hair-profile")}
+            last
+          />
+        ) : null}
       </SettingsSection>
+      {isStaff ? (
+        <SettingsSection title="Client care">
+          <SettingsRow
+            icon="clipboard"
+            label="Consultations ready for review"
+            onPress={() => router.push("/staff/consultations" as Href)}
+          />
+          <SettingsRow
+            icon="clock"
+            label="Manage availability"
+            onPress={() => router.push("/staff/availability" as Href)}
+          />
+          <SettingsRow
+            icon="calendar"
+            label="Client appointments"
+            onPress={() => router.push("/staff/appointments" as Href)}
+          />
+          <SettingsRow
+            icon="message-circle"
+            label="Client messages"
+            onPress={() => router.push("/messages" as Href)}
+            last
+          />
+        </SettingsSection>
+      ) : null}
       <SettingsSection title="Preferences">
         <SettingsRow
           icon="clock"
@@ -274,14 +305,16 @@ export function SettingsHomeScreen() {
           last
         />
       </SettingsSection>
-      <SettingsSection title="Consultations">
-        <SettingsRow
-          icon="calendar"
-          label="My appointments"
-          onPress={() => router.push("/appointments" as Href)}
-          last
-        />
-      </SettingsSection>
+      {!isStaff ? (
+        <SettingsSection title="Consultations">
+          <SettingsRow
+            icon="calendar"
+            label="My appointments"
+            onPress={() => router.push("/appointments" as Href)}
+            last
+          />
+        </SettingsSection>
+      ) : null}
       <SettingsSection title="Privacy & legal">
         <SettingsRow
           icon="file-text"
@@ -338,31 +371,6 @@ export function SettingsHomeScreen() {
           last
         />
       </SettingsSection>
-      {user?.is_staff ? (
-        <SettingsSection title="TK workspace">
-          <SettingsRow
-            icon="clipboard"
-            label="Consultations ready for review"
-            onPress={() => router.push("/staff/consultations" as Href)}
-          />
-          <SettingsRow
-            icon="clock"
-            label="Manage availability"
-            onPress={() => router.push("/staff/availability" as Href)}
-          />
-          <SettingsRow
-            icon="calendar"
-            label="Client appointments"
-            onPress={() => router.push("/staff/appointments" as Href)}
-          />
-          <SettingsRow
-            icon="message-circle"
-            label="Client messages"
-            onPress={() => router.push("/messages" as Href)}
-            last
-          />
-        </SettingsSection>
-      ) : null}
     </SettingsPage>
   );
 }
@@ -472,7 +480,7 @@ export function PersonalProfileScreen() {
           {saved && !isDirty ? (
             <SavedFeedback>Personal details saved.</SavedFeedback>
           ) : null}
-          <Button disabled={!isDirty} loading={isSubmitting} onPress={submit}>
+          <Button disabled={!isDirty} loading={isSubmitting} onPress={() => void submit()}>
             Save personal details
           </Button>
         </Card>
@@ -564,9 +572,11 @@ function ChoiceField<T extends string>({
 
 export function HairProfileScreen() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
   const profile = useQuery({
     queryKey: ["settings", "hair-profile"],
     queryFn: getHairProfile,
+    enabled: !user?.is_staff,
   });
   const [saved, setSaved] = useState(false);
   const {
@@ -606,6 +616,7 @@ export function HairProfileScreen() {
       setError("root", { message: getApiErrorMessage(error) });
     }
   });
+  if (user?.is_staff) return <Redirect href="/settings" />;
   return (
     <SettingsPage title="Hair profile">
       <Text color="muted">
@@ -709,7 +720,7 @@ export function HairProfileScreen() {
               private app workspace.
             </SavedFeedback>
           ) : null}
-          <Button disabled={!isDirty} loading={isSubmitting} onPress={submit}>
+          <Button disabled={!isDirty} loading={isSubmitting} onPress={() => void submit()}>
             Save hair profile
           </Button>
         </Card>
@@ -796,7 +807,7 @@ export function TimezoneScreen() {
           {saved && !isDirty ? (
             <SavedFeedback>Time zone saved.</SavedFeedback>
           ) : null}
-          <Button disabled={!isDirty} loading={isSubmitting} onPress={submit}>
+          <Button disabled={!isDirty} loading={isSubmitting} onPress={() => void submit()}>
             Save time zone
           </Button>
         </Card>

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Pressable, TextInput, View } from "react-native";
+import { Pressable, type TextInputInstance, View } from "react-native";
 import { z } from "zod";
 
 import { AuthShell } from "./AuthShell";
@@ -29,9 +29,9 @@ type Values = z.infer<typeof schema>;
 export function SignUpScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
-  const confirmPasswordRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmPasswordRef = useRef<TextInputInstance>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const {
@@ -196,7 +196,7 @@ export function SignUpScreen() {
           {errors.root.message}
         </Text>
       ) : null}
-      <Button loading={isSubmitting} onPress={submit}>
+      <Button loading={isSubmitting} onPress={() => void submit()}>
         Create account
       </Button>
       <View

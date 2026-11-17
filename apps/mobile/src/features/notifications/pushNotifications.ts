@@ -1,5 +1,9 @@
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
+import {
+  AndroidImportance,
+  AndroidNotificationVisibility,
+} from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -58,9 +62,9 @@ export async function enablePushOnThisDevice(requestPermission = true) {
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("care-updates", {
       name: "Care updates",
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: AndroidImportance.HIGH,
       vibrationPattern: [0, 200],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+      lockscreenVisibility: AndroidNotificationVisibility.PRIVATE,
     });
   }
   let permission = await Notifications.getPermissionsAsync();

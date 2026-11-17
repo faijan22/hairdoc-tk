@@ -1,8 +1,8 @@
-import { Platform } from "react-native";
 import { z } from "zod";
 
 import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm } from "./client";
 import { API_BASE_URL } from "./config";
+import { appendAssetToFormData, type MultipartAsset } from "./multipart";
 
 export const serviceSchema = z.object({
   public_id: z.string().uuid(),
@@ -196,21 +196,17 @@ export async function getConsultationPhotos(publicId: string) {
 
 export async function uploadConsultationPhoto(
   publicId: string,
-  asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+  asset: MultipartAsset,
   category: ConsultationPhotoCategory,
 ) {
   const form = new FormData();
   form.append("category", category);
-  if (Platform.OS === "web") {
-    const blob = await fetch(asset.uri).then((response) => response.blob());
-    form.append("file", blob, asset.fileName || "consultation-photo.jpg");
-  } else {
-    form.append("file", {
-      uri: asset.uri,
-      name: asset.fileName || "consultation-photo.jpg",
-      type: asset.mimeType || "image/jpeg",
-    } as unknown as Blob);
-  }
+  await appendAssetToFormData(
+    form,
+    "file",
+    asset,
+    "consultation-photo.jpg",
+  );
   return photosOverviewSchema.parse(
     await apiPostForm<unknown>(`/consultations/${publicId}/photos/`, form),
   );

@@ -13,16 +13,12 @@ if not ALLOWED_HOSTS:  # noqa: F405
     missing.append("DJANGO_ALLOWED_HOSTS")
 if DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":  # noqa: F405
     missing.append("DATABASE_URL (PostgreSQL required)")
-if SQUARE_ENVIRONMENT != "production":  # noqa: F405
-    missing.append("SQUARE_ENVIRONMENT=production")
-if not SQUARE_ACCESS_TOKEN:  # noqa: F405
-    missing.append("SQUARE_ACCESS_TOKEN")
-if not SQUARE_LOCATION_ID:  # noqa: F405
-    missing.append("SQUARE_LOCATION_ID")
-if not SQUARE_WEBHOOK_SIGNATURE_KEY:  # noqa: F405
-    missing.append("SQUARE_WEBHOOK_SIGNATURE_KEY")
-if urlparse(SQUARE_WEBHOOK_NOTIFICATION_URL).scheme != "https":  # noqa: F405
-    missing.append("SQUARE_WEBHOOK_NOTIFICATION_URL (HTTPS required)")
+if STRIPE_ENVIRONMENT != "production":  # noqa: F405
+    missing.append("STRIPE_ENVIRONMENT=production")
+if not STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_")):  # noqa: F405
+    missing.append("STRIPE_SECRET_KEY (live key required)")
+if not STRIPE_WEBHOOK_SECRET.startswith("whsec_"):  # noqa: F405
+    missing.append("STRIPE_WEBHOOK_SECRET")
 if urlparse(PAYMENT_RETURN_BASE_URL).scheme != "https":  # noqa: F405
     missing.append("PAYMENT_RETURN_BASE_URL (HTTPS required)")
 if VIDEO_PROVIDER_BACKEND.endswith(".DailyVideoProvider"):  # noqa: F405

@@ -14,14 +14,14 @@ from apps.payments.providers.base import CheckoutSession
 from apps.messaging.models import Conversation
 
 
-class FakeSquareProvider:
-    code = "SQUARE"
+class FakeStripeProvider:
+    code = "STRIPE"
 
     def create_checkout(self, **kwargs):
         return CheckoutSession(
-            session_id="square_link_hairdoc",
-            order_id="square_order_hairdoc",
-            url="https://square.link/u/hairdoc-test",
+            session_id="cs_test_hairdoc",
+            order_id="cs_test_hairdoc",
+            url="https://checkout.stripe.com/c/pay/hairdoc-test",
             expires_at=timezone.now() + timedelta(minutes=31),
         )
 
@@ -61,30 +61,45 @@ class PaymentApiTests(APITestCase):
         )
 
     def checkout(self, order):
-        with patch("apps.payments.services.get_payment_provider", return_value=FakeSquareProvider()):
+        with patch("apps.payments.services.get_payment_provider", return_value=FakeStripeProvider()):
             return self.client.post(reverse("payments:order-checkout", kwargs={"public_id": order.public_id}))
 
-    def square_event(self, event_id="evt_paid", *, amount=8000, payment_status="COMPLETED", event_type="payment.updated"):
+    def stripe_event(
+        self, event_id="evt_paid", *, amount=8000, payment_status="paid",
+        event_type="checkout.session.completed",
+    ):
         payment = Payment.objects.get(order__appointment=self.appointment)
         return {
-            "event_id": event_id,
+            "id": event_id,
             "type": event_type,
-            "data": {"object": {"payment": {
-                "id": "square_payment_hairdoc",
-                "order_id": payment.provider_order_id,
-                "amount_money": {"amount": amount, "currency": "GBP"},
-                "status": payment_status,
-            }}},
+            "data": {"object": {
+                "id": payment.provider_checkout_session_id,
+                "client_reference_id": str(payment.order.public_id),
+                "metadata": {"hairdoc_order_id": str(payment.order.public_id)},
+                "payment_intent": "pi_hairdoc",
+                "amount_total": amount,
+                "currency": "gbp",
+                "payment_status": payment_status,
+            }},
         }
 
     def post_event(self, event):
         with patch("apps.payments.services.get_payment_provider") as provider:
-            provider.return_value.code = "SQUARE"
+            provider.return_value.code = "STRIPE"
             provider.return_value.parse_webhook.return_value = event
             return self.client.post(
-                reverse("payments:square-webhook"), data=b"{}", content_type="application/json",
-                HTTP_X_SQUARE_HMACSHA256_SIGNATURE="test-signature",
+                reverse("payments:stripe-webhook"), data=b"{}", content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="test-signature",
             )
+
+    def test_stripe_webhook_readiness_is_public_but_processing_stays_signed(self):
+        readiness = self.client.get(reverse("payments:stripe-webhook"))
+        self.assertEqual(readiness.status_code, 200)
+        self.assertEqual(readiness.json(), {"status": "ready", "provider": "stripe"})
+        unsigned = self.client.post(
+            reverse("payments:stripe-webhook"), data=b"{}", content_type="application/json",
+        )
+        self.assertEqual(unsigned.status_code, 400)
 
     def test_order_is_user_scoped_server_priced_and_idempotent(self):
         response = self.create_order()
@@ -104,12 +119,12 @@ class PaymentApiTests(APITestCase):
         order = Order.objects.get(public_id=self.create_order().json()["public_id"])
         first = self.checkout(order)
         self.assertEqual(first.status_code, 200)
-        self.assertEqual(first.json()["checkout_url"], "https://square.link/u/hairdoc-test")
+        self.assertEqual(first.json()["checkout_url"], "https://checkout.stripe.com/c/pay/hairdoc-test")
         self.assertEqual(self.checkout(order).json()["payment"]["public_id"], first.json()["payment"]["public_id"])
         self.assertEqual(Payment.objects.get(order=order).attempts.count(), 1)
 
         Payment.objects.get(order=order).attempts.update(status="EXPIRED")
-        with self.settings(SQUARE_ACCESS_TOKEN="", SQUARE_LOCATION_ID=""):
+        with self.settings(STRIPE_SECRET_KEY=""):
             missing = self.client.post(reverse("payments:order-checkout", kwargs={"public_id": order.public_id}))
         self.assertEqual(missing.status_code, 503)
         self.assertNotEqual(Payment.objects.get(order=order).status, Payment.Status.SUCCEEDED)
@@ -117,7 +132,7 @@ class PaymentApiTests(APITestCase):
     def test_verified_paid_webhook_confirms_once_and_history_is_scoped(self):
         order = Order.objects.get(public_id=self.create_order().json()["public_id"])
         payment_id = self.checkout(order).json()["payment"]["public_id"]
-        event = self.square_event()
+        event = self.stripe_event()
         self.assertEqual(self.post_event(event).status_code, 200)
         self.assertEqual(self.post_event(event).status_code, 200)
 
@@ -125,7 +140,7 @@ class PaymentApiTests(APITestCase):
         payment = Payment.objects.get(public_id=payment_id)
         self.assertEqual(self.appointment.status, Appointment.Status.CONFIRMED)
         self.assertEqual(payment.status, Payment.Status.SUCCEEDED)
-        self.assertEqual(payment.provider_payment_id, "square_payment_hairdoc")
+        self.assertEqual(payment.provider_payment_id, "pi_hairdoc")
         self.assertEqual(AppointmentStatusHistory.objects.filter(to_status=Appointment.Status.CONFIRMED).count(), 1)
         self.assertEqual(WebhookEvent.objects.count(), 1)
         self.assertEqual(Conversation.objects.get(consultation=self.case).members.count(), 2)
@@ -157,12 +172,38 @@ class PaymentApiTests(APITestCase):
     def test_wrong_total_cannot_confirm_and_failed_event_is_recorded(self):
         order = Order.objects.get(public_id=self.create_order().json()["public_id"])
         self.checkout(order)
-        response = self.post_event(self.square_event(event_id="evt_wrong", amount=1))
+        response = self.post_event(self.stripe_event(event_id="evt_wrong", amount=1))
         self.assertEqual(response.status_code, 400)
         self.appointment.refresh_from_db()
         self.assertEqual(self.appointment.status, Appointment.Status.PAYMENT_PENDING)
         self.assertNotEqual(Payment.objects.get(order=order).status, Payment.Status.SUCCEEDED)
         self.assertEqual(WebhookEvent.objects.get(provider_event_id="evt_wrong").status, WebhookEvent.Status.FAILED)
+
+    def test_verified_unrelated_stripe_events_are_acknowledged_and_ignored(self):
+        payment_event = {
+            "id": "evt_unrelated_payment",
+            "type": "checkout.session.completed",
+            "data": {"object": {
+                "id": "cs_test_other", "client_reference_id": "other",
+                "metadata": {"hairdoc_order_id": "other"}, "payment_intent": "pi_other",
+                "amount_total": 100, "currency": "gbp", "payment_status": "paid",
+            }},
+        }
+        refund_event = {
+            "id": "evt_unrelated_refund",
+            "type": "refund.updated",
+            "data": {"object": {
+                "id": "re_other", "payment_intent": "pi_other",
+                "amount": 100, "currency": "gbp", "status": "succeeded",
+            }},
+        }
+
+        self.assertEqual(self.post_event(payment_event).status_code, 200)
+        self.assertEqual(self.post_event(refund_event).status_code, 200)
+        self.assertEqual(
+            set(WebhookEvent.objects.values_list("status", flat=True)),
+            {WebhookEvent.Status.IGNORED},
+        )
 
     def test_late_payment_requests_refund_instead_of_confirming_cancelled_slot(self):
         order = Order.objects.get(public_id=self.create_order().json()["public_id"])
@@ -170,28 +211,43 @@ class PaymentApiTests(APITestCase):
         self.appointment.status = Appointment.Status.CANCELLED
         self.appointment.cancelled_at = timezone.now()
         self.appointment.save(update_fields=("status", "cancelled_at", "updated_at"))
-        self.assertEqual(self.post_event(self.square_event(event_id="evt_late")).status_code, 200)
+        self.assertEqual(self.post_event(self.stripe_event(event_id="evt_late")).status_code, 200)
         self.appointment.refresh_from_db()
         payment = Payment.objects.get(order=order)
         self.assertEqual(self.appointment.status, Appointment.Status.CANCELLED)
         self.assertEqual(payment.status, Payment.Status.REFUND_PENDING)
         self.assertEqual(Refund.objects.get(payment=payment).amount, Decimal("80.00"))
 
-    def test_square_refund_webhook_updates_client_visible_state(self):
+    def test_expired_checkout_releases_the_unpaid_slot(self):
         order = Order.objects.get(public_id=self.create_order().json()["public_id"])
         self.checkout(order)
-        self.assertEqual(self.post_event(self.square_event(event_id="evt_for_refund")).status_code, 200)
+        event = self.stripe_event(
+            event_id="evt_expired", payment_status="unpaid", event_type="checkout.session.expired",
+        )
+        self.assertEqual(self.post_event(event).status_code, 200)
+
+        self.appointment.refresh_from_db()
+        order.refresh_from_db()
+        payment = Payment.objects.get(order=order)
+        self.assertEqual(self.appointment.status, Appointment.Status.EXPIRED)
+        self.assertEqual(order.status, Order.Status.EXPIRED)
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+
+    def test_stripe_refund_webhook_updates_client_visible_state(self):
+        order = Order.objects.get(public_id=self.create_order().json()["public_id"])
+        self.checkout(order)
+        self.assertEqual(self.post_event(self.stripe_event(event_id="evt_for_refund")).status_code, 200)
         refund_event = {
-            "event_id": "evt_refund",
+            "id": "evt_refund",
             "type": "refund.created",
-            "data": {"object": {"refund": {
-                "id": "square_refund_hairdoc", "payment_id": "square_payment_hairdoc",
-                "amount_money": {"amount": 8000, "currency": "GBP"}, "status": "COMPLETED",
-            }}},
+            "data": {"object": {
+                "id": "re_hairdoc", "payment_intent": "pi_hairdoc",
+                "amount": 8000, "currency": "gbp", "status": "succeeded",
+            }},
         }
         self.assertEqual(self.post_event(refund_event).status_code, 200)
         payment = Payment.objects.get(order=order)
         order.refresh_from_db()
         self.assertEqual(payment.status, Payment.Status.REFUNDED)
         self.assertEqual(order.status, Order.Status.REFUNDED)
-        self.assertEqual(Refund.objects.get(payment=payment).provider_refund_id, "square_refund_hairdoc")
+        self.assertEqual(Refund.objects.get(payment=payment).provider_refund_id, "re_hairdoc")

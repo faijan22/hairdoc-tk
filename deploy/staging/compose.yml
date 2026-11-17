@@ -1,0 +1,140 @@
+name: hairdoc-tk-staging
+
+x-backend: &backend
+  image: hairdoc-tk-backend:staging
+  build:
+    context: ../..
+    dockerfile: deploy/staging/backend.Dockerfile
+  env_file:
+    - .env
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.staging
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+    USE_REDIS_CHANNEL_LAYER: "true"
+    STATIC_ROOT: /app/apps/backend/staticfiles
+    PRIVATE_MEDIA_ROOT: /app/apps/backend/.private-media
+  restart: unless-stopped
+  depends_on:
+    runtime-init:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - static_data:/app/apps/backend/staticfiles
+    - private_media:/app/apps/backend/.private-media
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  runtime-init:
+    image: hairdoc-tk-backend:staging
+    build:
+      context: ../..
+      dockerfile: deploy/staging/backend.Dockerfile
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /data/static /data/private /data/celery
+        chown -R 10001:10001 /data/static /data/private /data/celery
+    restart: "no"
+    volumes:
+      - static_data:/data/static
+      - private_media:/data/private
+      - celery_data:/data/celery
+
+  api:
+    <<: *backend
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/', headers={'X-Forwarded-Proto':'https'}); urllib.request.urlopen(request, timeout=3).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=2"]
+
+  beat:
+    <<: *backend
+    command:
+      - celery
+      - -A
+      - config
+      - beat
+      - --loglevel=INFO
+      - --schedule=/var/lib/celery/celerybeat-schedule
+    volumes:
+      - static_data:/app/apps/backend/staticfiles
+      - private_media:/app/apps/backend/.private-media
+      - celery_data:/var/lib/celery
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      HAIRDOC_DOMAIN: ${HAIRDOC_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - static_data:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:
+  private_media:
+  celery_data:
+  caddy_data:
+  caddy_config:
+

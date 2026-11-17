@@ -57,7 +57,7 @@ export function VerifyEmailScreen() {
         <TextField label="Verification token" autoCapitalize="none" value={field.value} onBlur={field.onBlur} onChangeText={field.onChange} error={errors.token?.message} />
       )} />
       {errors.root?.message ? <Text variant="caption" color="danger">{errors.root.message}</Text> : null}
-      <Button loading={isSubmitting} onPress={submit}>Verify email</Button>
+      <Button loading={isSubmitting} onPress={() => void submit()}>Verify email</Button>
       <Button variant="ghost" loading={resending} onPress={resend}>Send a new token</Button>
     </AuthShell>
   );

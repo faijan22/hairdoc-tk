@@ -162,7 +162,7 @@ function StatusCard({
           {paid
             ? "Your appointment is confirmed."
             : pending
-              ? "Waiting for Square confirmation."
+              ? "Waiting for Stripe confirmation."
               : refundPending
                 ? "Refund review is in progress."
                 : "Payment was not completed."}
@@ -170,7 +170,7 @@ function StatusCard({
         <Text color="muted">
           {payment.failure_message ||
             (pending
-              ? "This updates only after HairDoc TK receives Square's signed confirmation. It can take a few moments."
+              ? "This updates only after HairDoc TK receives Stripe's signed confirmation. It can take a few moments."
               : paid
                 ? "Your receipt and appointment details are ready."
                 : refundPending
@@ -264,7 +264,7 @@ export function CheckoutScreen() {
           <Text variant="display">Confirm, then pay securely.</Text>
           <Text color="muted">
             Your appointment and price come directly from HairDoc TK. Card
-            details are entered on Square&apos;s hosted page.
+            details are entered on Stripe&apos;s hosted page.
           </Text>
         </View>
         {order.isPending ? <LoadingIndicator /> : null}
@@ -310,8 +310,24 @@ export function CheckoutScreen() {
         {payment.data ? (
           <StatusCard
             payment={payment.data}
-            onCheck={() => payment.refetch()}
+            onCheck={() => {
+              void payment.refetch().catch(() => undefined);
+            }}
           />
+        ) : null}
+        {payment.isError ? (
+          <Card style={{ gap: theme.spacing.sm }}>
+            <Text variant="bodyStrong">Payment status could not refresh.</Text>
+            <Text color="danger">{getApiErrorMessage(payment.error)}</Text>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                void payment.refetch().catch(() => undefined);
+              }}
+            >
+              Try again
+            </Button>
+          </Card>
         ) : null}
         {order.data && payment.data?.status !== "SUCCEEDED" ? (
           <Card style={{ gap: theme.spacing.md }}>
@@ -328,7 +344,7 @@ export function CheckoutScreen() {
                 color={theme.colors.primary}
               />
               <View style={{ flex: 1 }}>
-                <Text variant="bodyStrong">Square secure checkout</Text>
+                <Text variant="bodyStrong">Stripe secure checkout</Text>
                 <Text variant="caption" color="muted">
                   HairDoc TK never receives or stores your card number.
                 </Text>
@@ -350,7 +366,7 @@ export function CheckoutScreen() {
               color="muted"
               style={{ textAlign: "center" }}
             >
-              Your booking becomes confirmed only after Square verifies the
+              Your booking becomes confirmed only after Stripe verifies the
               payment.
             </Text>
           </Card>
@@ -387,7 +403,13 @@ export function PaymentHistoryScreen() {
           <Card style={{ gap: theme.spacing.md }}>
             <Text variant="heading">Payments could not load.</Text>
             <Text color="danger">{getApiErrorMessage(payments.error)}</Text>
-            <Button onPress={() => payments.refetch()}>Try again</Button>
+            <Button
+              onPress={() => {
+                void payments.refetch().catch(() => undefined);
+              }}
+            >
+              Try again
+            </Button>
           </Card>
         ) : null}
         {payments.isSuccess && !payments.data.length ? (
@@ -464,12 +486,23 @@ export function PaymentDetailScreen() {
           <Card style={{ gap: theme.spacing.md }}>
             <Text variant="heading">Payment could not load.</Text>
             <Text color="danger">{getApiErrorMessage(item.error)}</Text>
-            <Button onPress={() => item.refetch()}>Try again</Button>
+            <Button
+              onPress={() => {
+                void item.refetch().catch(() => undefined);
+              }}
+            >
+              Try again
+            </Button>
           </Card>
         ) : null}
         {item.data ? (
           <>
-            <StatusCard payment={item.data} onCheck={() => item.refetch()} />
+            <StatusCard
+              payment={item.data}
+              onCheck={() => {
+                void item.refetch().catch(() => undefined);
+              }}
+            />
             <Card style={{ gap: theme.spacing.md }}>
               <Text variant="overline" color="accent">
                 RECEIPT
@@ -513,8 +546,8 @@ export function PaymentDetailScreen() {
                 >
                   <Text color="muted">Provider</Text>
                   <Text variant="bodyStrong">
-                    {item.data.provider === "SQUARE"
-                      ? "Square"
+                    {item.data.provider === "STRIPE"
+                      ? "Stripe"
                       : item.data.provider}
                   </Text>
                 </View>

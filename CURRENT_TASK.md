@@ -1,32 +1,40 @@
-# Current Task - 13K Chat Interaction and Message Controls
+# Current Task - 13L Stripe Test-Mode Activation
 
-**Status:** `IN PROGRESS` — implementation/tests pass; physical two-device verification is still required.  
-**Started:** 2026-09-18  
-**Next planned, not started:** Task 13L - configure and verify TK's Square sandbox credentials; then Task 14 hardening.
+**Status:** `IN PROGRESS` — Stripe implementation and test API credential are ready; the stable staging DNS/server route, final signing secret and end-to-end payment acceptance remain.
+**Started:** 2026-10-05
+**Next planned, not started:** Task 14 hardening.
 
 ## Scope
 
-- Show text/image sends immediately, expose two-way typing clearly, and support reply, delete for me, and delete for everyone in the private client↔TK chat.
+- Replace Square with Stripe Checkout behind the existing provider boundary.
+- Keep test and production credentials strictly separated and verify that webhook-confirmed payments persist and confirm appointments.
 
-## Completed
+## Ready
 
-- Send no longer awaits query cancellation. Text/image bubbles appear at tap time with a clock, survive background refetch, and reconcile by idempotent client UUID; a failed bubble can be retried.
-- Backend-authenticated typing appears as visible text and animated dots by the composer and in the conversation header. Reconnecting with a draft re-announces typing; no polling is presented as live.
-- A missed heartbeat closes and reconnects a stale socket. Chat history loads once, automatically fetches older cursor pages on scroll, and catches up on reconnect; no timed message or inbox polling.
-- One user-scoped WebSocket keeps the inbox and in-app notifications current even outside a conversation; the open conversation has its own WebSocket regardless of peer presence. Foreground remote banners are suppressed in favor of the in-app banner. App foregrounding revalidates inbox/notifications.
-- Socket events now carry per-member inbox snapshots and user-scoped notification data. The UI updates its cache directly; send, receive, typing, read, and active-chat notification events no longer trigger repeated list/detail GETs. Initial load, cursor history, missing-cache fallback, and reconnect/foreground catch-up still use REST. Chat cache keys include the signed-in user.
-- Opening a chat seeds its detail from the inbox row when available; active-chat notification reads reuse the conversation read acknowledgement instead of a second POST. The notification row is committed before the message socket event to avoid a read-before-notification race.
-- Typing presence refreshes on the socket while input continues, stops after three seconds idle or composer blur, and the receiver has a five-second expiry; no HTTP calls are made for typing.
-- The local launcher explicitly embeds the current LAN realtime endpoint separately from the Expo REST tunnel bridge. Native socket access still needs physical-device acceptance.
-- Native clients without a browser Origin header can connect using the one-use ticket; browser connections retain host-origin validation.
-- Replies store a same-conversation message reference and show a short quote. Both members may hide a message for themselves; only the sender may delete for everyone. Shared deletion retains a tombstone, strips body, removes the private attachment and signed access, and broadcasts the change.
-- Added and applied migrations `messaging.0004` and `0005`; focused inbox/conversation socket, authorization, reply, image-removal, and frontend cache tests pass. Full suite: 64 backend and 24 mobile tests; lint/typecheck clean.
-- Square credentials were not changed or stored; sandbox configuration/verification is the next separately approved slice.
+- Server-priced Stripe-hosted Checkout; HairDoc TK never handles card data.
+- Idempotent Checkout Session creation with HairDoc order references in Stripe metadata.
+- Constant-time raw-body webhook verification with timestamp tolerance and replay-safe event storage.
+- Amount, currency, order reference, Checkout Session, PaymentIntent, event ID, and refunds are validated before state changes.
+- `test` rejects live keys; `production` rejects test keys and requires HTTPS return URLs.
+- Free consultations bypass the provider; historical Square records remain readable but Square checkout/webhook code is removed.
+- Payment-status refresh failures remain visible/retryable in the screen instead of becoming unhandled Expo promises; development logs identify only the failed method/path/status.
+- Chat images open in a private full-screen pinch/pan viewer without blank black transition frames; long-press actions use a keyboard-safe bottom sheet with a selected-message preview, stable client-message keys prevent pending/sent/read reconciliation from remounting and blinking bubbles, and message corners follow compact modern chat geometry.
+- Chat headers show peer presence—not local transport state: `Online` requires at least one active peer connection, while app background, screen lock, last-device disconnect, or socket loss returns it to `Offline`; typing temporarily takes priority.
+- Mobile is aligned to Expo SDK 58 / React Native 0.88 for the current App Store Expo Go runtime; Expo Doctor, types, lint, 24 tests, and iOS/Android/web production exports pass.
+- Physical-device image uploads use Expo SDK 58 `File`/`Blob` multipart bodies instead of the removed legacy React Native URI object; progress, consultation, and chat photos share the corrected upload path.
+- Staff/client workspace boundaries are enforced in navigation and APIs: TK sees client-care tools instead of Hair Profile/My Appointments, client consultation routes redirect to staff workspaces, and staff accounts cannot create a client hair profile or start a self-consultation.
+- A fail-closed staging deployment stack is ready for `api-dev.hairdoctk.livecoder.tech`: Docker Compose runs PostgreSQL, Redis, Daphne/Channels, Celery worker/beat and Caddy HTTPS; server bootstrap and one-command Git/migration/restart deployment scripts are included.
 
-## Remaining acceptance check
+## Remaining activation and acceptance
 
-- Restart `npm run dev` so Django and Expo load these changes. Open the same conversation on client and TK devices; both headers must say `Live`. Type continuously for 10+ seconds and confirm presence stays visible; send text/image and confirm tap-time clock, prompt peer arrival, then one/two ticks. Leave one account in the inbox and verify immediate row/unread/banner updates and tapping the banner opens the chat. During ordinary text sends, the browser network panel should show no repeated conversation/detail/notification GETs; initial load, missed-event catch-up, and image-token fetches may still use REST. Verify cursor history, reply and both deletion modes. If either header stays `Reconnecting…`, inspect the direct device-to-LAN WebSocket transport before marking done. Remote background push requires a signed development/store build and credentials; Expo Go cannot validate it.
+- Revoke the previously exposed Square tokens and remove legacy `SQUARE_*` lines from the ignored local `.env`; the application no longer reads them.
+- Stripe test-mode secret key is configured in ignored `apps/backend/.env`; rotate it after development because it was shared through chat.
+- Point `api-dev.hairdoctk.livecoder.tech` through Cloudflare to the staging server, create the ignored server `deploy/staging/.env`, run the first deployment, and verify HTTPS/WSS plus unchallenged signed POST delivery at `/api/v1/integrations/stripe/webhook/`.
+- Correct/recreate the Stripe Sandbox destination with a current payload version, subscribe to the seven approved checkout/refund events, and put its final `whsec_...` value in ignored `apps/backend/.env` as `STRIPE_WEBHOOK_SECRET`.
+- Apply migration `payments.0004_stripe_provider`.
+- Complete one positive-price booking with a Stripe test card and verify payment, order, appointment, conversation, duplicate-event idempotency, failure/expiry, and refund records.
+- Keep live credentials inactive; no real charge or production switch without explicit approval.
 
 ## Stop boundary
 
-Do not start Square credential activation or Task 14 without approval.
+Do not switch to Stripe production or start Task 14 without approval.

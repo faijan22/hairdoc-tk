@@ -144,7 +144,7 @@ class BookingApiTests(APITestCase):
         starts = {item["starts_at"] for item in self.slots().json()["slots"]}
         self.assertIn(slots[4]["starts_at"], starts)
 
-    def test_free_consultation_confirms_without_square_and_opens_private_conversation(self):
+    def test_free_consultation_confirms_without_payment_provider_and_opens_private_conversation(self):
         self.case.price_amount = "0.00"
         self.case.save(update_fields=("price_amount", "updated_at"))
 

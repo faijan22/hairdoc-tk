@@ -260,6 +260,8 @@ class HairProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self, user):
+        if user.is_staff:
+            raise PermissionDenied("Hair profiles are available only to client accounts.")
         profile, _ = ClientHairProfile.objects.get_or_create(user=user)
         return profile
 

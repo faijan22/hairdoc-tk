@@ -141,8 +141,10 @@ function ConsultationPage({
 
 function AuthGuard({ children }: PropsWithChildren) {
   const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   if (status === "bootstrapping") return <LoadingIndicator />;
   if (status !== "authenticated") return <Redirect href="/auth/sign-in" />;
+  if (user?.is_staff) return <Redirect href="/staff/consultations" />;
   return children;
 }
 
@@ -723,7 +725,7 @@ export function ConsultationIntakeScreen() {
               <Button
                 style={{ flex: 1 }}
                 loading={mutation.isPending}
-                onPress={proceed}
+                onPress={() => void proceed()}
               >
                 {sectionIndex === sections.length - 1
                   ? "Save and review"

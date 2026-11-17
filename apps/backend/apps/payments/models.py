@@ -83,7 +83,7 @@ class Payment(BaseModel):
 
     order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="payment")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="payments")
-    provider = models.CharField(max_length=24, default="SQUARE")
+    provider = models.CharField(max_length=24, default="STRIPE")
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.CREATED)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3)
@@ -156,7 +156,7 @@ class WebhookEvent(BaseModel):
         IGNORED = "IGNORED", "Ignored"
         FAILED = "FAILED", "Failed"
 
-    provider = models.CharField(max_length=24, default="SQUARE")
+    provider = models.CharField(max_length=24, default="STRIPE")
     provider_event_id = models.CharField(max_length=255)
     event_type = models.CharField(max_length=120)
     payload_hash = models.CharField(max_length=64)

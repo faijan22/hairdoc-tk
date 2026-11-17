@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.accounts.models import LegalDocument, User, UserConsent
+from apps.accounts.models import ClientHairProfile, LegalDocument, User, UserConsent
 from apps.accounts.services import create_device_session
 
 
@@ -61,6 +61,21 @@ class ProfileSettingsApiTests(APITestCase):
         self.client.credentials()
         for route in ("accounts:me", "accounts:hair-profile", "accounts:notification-preferences", "accounts:consents"):
             self.assertEqual(self.client.get(reverse(route)).status_code, 401)
+
+    def test_staff_account_cannot_create_a_client_hair_profile(self):
+        staff = User.objects.create_user(
+            "tk@example.com",
+            "HairDoc!2026Strong",
+            is_email_verified=True,
+            is_staff=True,
+        )
+        access, _, _ = create_device_session(staff, "TK phone")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = self.client.get(reverse("accounts:hair-profile"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ClientHairProfile.objects.filter(user=staff).exists())
 
 
 class LegalAndConsentApiTests(APITestCase):

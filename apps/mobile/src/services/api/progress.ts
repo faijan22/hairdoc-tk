@@ -1,7 +1,7 @@
-import { Platform } from "react-native";
 import { z } from "zod";
 
 import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm } from "./client";
+import { appendAssetToFormData, type MultipartAsset } from "./multipart";
 
 const photoSchema = z.object({
   public_id: z.string().uuid(),
@@ -94,20 +94,12 @@ export async function getProgressPhotos(publicId: string) {
 }
 export async function uploadProgressPhoto(
   publicId: string,
-  asset: { uri: string; fileName?: string | null; mimeType?: string | null },
+  asset: MultipartAsset,
   category: ProgressCategory,
 ) {
   const form = new FormData();
   form.append("category", category);
-  if (Platform.OS === "web") {
-    const blob = await fetch(asset.uri).then((response) => response.blob());
-    form.append("file", blob, asset.fileName || "progress-photo.jpg");
-  } else
-    form.append("file", {
-      uri: asset.uri,
-      name: asset.fileName || "progress-photo.jpg",
-      type: asset.mimeType || "image/jpeg",
-    } as unknown as Blob);
+  await appendAssetToFormData(form, "file", asset, "progress-photo.jpg");
   return photosSchema.parse(
     await apiPostForm<unknown>(`/progress/${publicId}/photos/`, form),
   );

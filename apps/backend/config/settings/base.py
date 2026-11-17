@@ -12,11 +12,15 @@ env = environ.Env(
     AUTH_ACCESS_TOKEN_MINUTES=(int, 15),
     AUTH_REFRESH_TOKEN_DAYS=(int, 30),
     AUTH_ACTION_TOKEN_MINUTES=(int, 30),
+    STRIPE_WEBHOOK_TOLERANCE_SECONDS=(int, 300),
     VIDEO_JOIN_EARLY_MINUTES=(int, 10),
     VIDEO_JOIN_LATE_MINUTES=(int, 15),
     PUSH_NOTIFICATIONS_ENABLED=(bool, False),
     EMAIL_NOTIFICATIONS_ENABLED=(bool, False),
+    EMAIL_PORT=(int, 587),
+    EMAIL_USE_TLS=(bool, True),
     PHOTO_CONSENT_REQUIRED=(bool, True),
+    CSRF_TRUSTED_ORIGINS=(list, []),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -99,7 +103,8 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = env("STATIC_ROOT", default=str(BASE_DIR / "staticfiles"))
 MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / ".media"))
 PRIVATE_MEDIA_ROOT = env("PRIVATE_MEDIA_ROOT", default=str(BASE_DIR / ".private-media"))
 PRIVATE_FILE_STORAGE_BACKEND = env(
@@ -135,14 +140,14 @@ AUTH_REFRESH_COOKIE_PATH = "/api/v1/auth/"
 
 PAYMENT_PROVIDER_BACKEND = env(
     "PAYMENT_PROVIDER_BACKEND",
-    default="apps.payments.providers.square.SquarePaymentProvider",
+    default="apps.payments.providers.stripe.StripePaymentProvider",
 )
-SQUARE_ENVIRONMENT = env("SQUARE_ENVIRONMENT", default="sandbox")
-SQUARE_API_VERSION = env("SQUARE_API_VERSION", default="2026-08-19")
-SQUARE_ACCESS_TOKEN = env("SQUARE_ACCESS_TOKEN", default="")
-SQUARE_LOCATION_ID = env("SQUARE_LOCATION_ID", default="")
-SQUARE_WEBHOOK_SIGNATURE_KEY = env("SQUARE_WEBHOOK_SIGNATURE_KEY", default="")
-SQUARE_WEBHOOK_NOTIFICATION_URL = env("SQUARE_WEBHOOK_NOTIFICATION_URL", default="")
+STRIPE_ENVIRONMENT = env("STRIPE_ENVIRONMENT", default="test")
+STRIPE_API_BASE_URL = env("STRIPE_API_BASE_URL", default="https://api.stripe.com")
+STRIPE_API_VERSION = env("STRIPE_API_VERSION", default="2026-02-25.clover")
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_WEBHOOK_TOLERANCE_SECONDS = env("STRIPE_WEBHOOK_TOLERANCE_SECONDS")
 PAYMENT_RETURN_BASE_URL = env(
     "PAYMENT_RETURN_BASE_URL",
     default="http://127.0.0.1:8000/api/v1/payments/return",
@@ -160,9 +165,17 @@ DAILY_DOMAIN = env("DAILY_DOMAIN", default="")
 PUSH_NOTIFICATIONS_ENABLED = env("PUSH_NOTIFICATIONS_ENABLED")
 EMAIL_NOTIFICATIONS_ENABLED = env("EMAIL_NOTIFICATIONS_ENABLED")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="HairDoc TK <noreply@hairdoctk.invalid>")
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS")
+EMAIL_TIMEOUT = 10
 PHOTO_CONSENT_REQUIRED = env("PHOTO_CONSENT_REQUIRED")
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = (*default_headers, "x-hairdoc-client")
 

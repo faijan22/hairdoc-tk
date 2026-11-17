@@ -16,11 +16,14 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -429,6 +432,7 @@ function ChatMessage({
   onReply,
   onDelete,
   onRetry,
+  onOpenImage,
 }: {
   message: ChatItem;
   mine: boolean;
@@ -436,10 +440,24 @@ function ChatMessage({
   onReply: () => void;
   onDelete: (mode: "self" | "everyone") => void;
   onRetry: () => void;
+  onOpenImage: () => void;
 }) {
   const theme = useTheme();
+  const viewport = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [actionsOpen, setActionsOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<"self" | "everyone" | null>(null);
+  const openActions = () => {
+    if (message.optimistic || message.failed) return;
+    Keyboard.dismiss();
+    setConfirmDelete(null);
+    setActionsOpen(true);
+  };
+  const closeActions = () => {
+    setConfirmDelete(null);
+    setActionsOpen(false);
+  };
+  const actionSheetWidth = Math.min(420, viewport.width - 24);
   return (
     <Animated.View
       entering={FadeInUp.duration(180)}
@@ -451,16 +469,19 @@ function ChatMessage({
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Message options"
-        onLongPress={() => setActionsOpen(true)}
-        onPress={() => setActionsOpen((value) => !value)}
+        accessibilityLabel={message.attachment ? "Open private message image. Long press for actions." : "Message. Long press for actions."}
+        delayLongPress={280}
+        onLongPress={openActions}
+        onPress={() => {
+          if (message.attachment && imageUri) onOpenImage();
+        }}
         style={{
-          paddingHorizontal: theme.spacing.sm,
-          paddingVertical: theme.spacing.xs,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
           gap: theme.spacing.xs,
-          borderRadius: theme.radius.lg,
-          borderBottomRightRadius: mine ? 4 : theme.radius.lg,
-          borderBottomLeftRadius: mine ? theme.radius.lg : 4,
+          borderRadius: 18,
+          borderBottomRightRadius: mine ? 5 : 18,
+          borderBottomLeftRadius: mine ? 18 : 5,
           backgroundColor: mine
             ? theme.colors.primaryMuted
             : theme.colors.surface,
@@ -485,7 +506,7 @@ function ChatMessage({
               width: 240,
               maxWidth: "100%",
               aspectRatio: message.attachment.width / message.attachment.height,
-              borderRadius: theme.radius.md,
+              borderRadius: 13,
               backgroundColor: theme.colors.surfaceMuted,
             }}
           />
@@ -519,37 +540,366 @@ function ChatMessage({
           <Text variant="caption" color="danger">Not sent · Tap to retry</Text>
         </Pressable>
       ) : null}
-      {actionsOpen && !message.optimistic && !message.failed ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, padding: 8, backgroundColor: theme.colors.surfaceMuted, borderRadius: 12 }}>
-          {!message.deleted_for_everyone ? (
-            <Pressable accessibilityRole="button" onPress={() => { setActionsOpen(false); onReply(); }}>
-              <Text variant="caption" color="primary">Reply</Text>
-            </Pressable>
-          ) : null}
-          <Pressable accessibilityRole="button" onPress={() => setConfirmDelete("self")}>
-            <Text variant="caption" color="danger">Delete for me</Text>
-          </Pressable>
-          {mine && !message.deleted_for_everyone ? (
-            <Pressable accessibilityRole="button" onPress={() => setConfirmDelete("everyone")}>
-              <Text variant="caption" color="danger">Delete for everyone</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      {confirmDelete ? (
-        <View style={{ padding: 8, gap: 8, backgroundColor: theme.colors.surfaceMuted, borderRadius: 12 }}>
-          <Text variant="caption">{confirmDelete === "everyone" ? "Remove this message for both people?" : "Remove this message from your chat?"}</Text>
-          <View style={{ flexDirection: "row", gap: 16 }}>
-            <Pressable accessibilityRole="button" onPress={() => { onDelete(confirmDelete); setConfirmDelete(null); setActionsOpen(false); }}>
-              <Text variant="caption" color="danger">Delete</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(null)}>
-              <Text variant="caption">Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
+      {actionsOpen ? (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
+          onRequestClose={closeActions}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close message actions"
+            onPress={closeActions}
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.12)",
+            }}
+          />
+          <Animated.View
+            entering={FadeInUp.duration(180)}
+            accessibilityRole="menu"
+            style={{
+              position: "absolute",
+              bottom: Math.max(insets.bottom, 12),
+              left: (viewport.width - actionSheetWidth) / 2,
+              width: actionSheetWidth,
+              padding: 8,
+              borderRadius: 24,
+              backgroundColor: theme.colors.surface,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              shadowColor: "#000",
+              shadowOpacity: 0.18,
+              shadowRadius: 18,
+              shadowOffset: { width: 0, height: 8 },
+              elevation: 8,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                margin: 4,
+                marginBottom: 8,
+                padding: 12,
+                borderRadius: 16,
+                backgroundColor: theme.colors.surfaceMuted,
+              }}
+            >
+              {message.attachment && imageUri ? (
+                <Image
+                  source={{ uri: imageUri }}
+                  accessibilityLabel="Selected message image"
+                  resizeMode="cover"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    backgroundColor: theme.colors.border,
+                  }}
+                />
+              ) : null}
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="caption" color="primary">
+                  {mine ? "You" : message.sender_name}
+                </Text>
+                <Text numberOfLines={2}>
+                  {message.deleted_for_everyone
+                    ? "This message was deleted."
+                    : message.body || (message.attachment ? "Photo" : "Message")}
+                </Text>
+              </View>
+            </View>
+            {confirmDelete ? (
+              <View style={{ gap: 12, padding: 8 }}>
+                <Text variant="bodyStrong">
+                  {confirmDelete === "everyone"
+                    ? "Delete for everyone?"
+                    : "Delete for you?"}
+                </Text>
+                <Text variant="caption" color="muted">
+                  {confirmDelete === "everyone"
+                    ? "This message will be replaced for both people."
+                    : "This message will only disappear from your chat."}
+                </Text>
+                <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 18 }}>
+                  <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(null)} hitSlop={8}>
+                    <Text variant="caption">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      onDelete(confirmDelete);
+                      closeActions();
+                    }}
+                    hitSlop={8}
+                  >
+                    <Text variant="caption" color="danger">Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                {!message.deleted_for_everyone ? (
+                  <MessageAction
+                    icon="corner-up-left"
+                    label="Reply"
+                    onPress={() => {
+                      closeActions();
+                      onReply();
+                    }}
+                  />
+                ) : null}
+                <MessageAction
+                  icon="trash-2"
+                  label="Delete for me"
+                  danger
+                  onPress={() => setConfirmDelete("self")}
+                />
+                {mine && !message.deleted_for_everyone ? (
+                  <MessageAction
+                    icon="trash"
+                    label="Delete for everyone"
+                    danger
+                    onPress={() => setConfirmDelete("everyone")}
+                  />
+                ) : null}
+              </>
+            )}
+          </Animated.View>
+        </Modal>
       ) : null}
     </Animated.View>
+  );
+}
+
+function MessageAction({
+  icon,
+  label,
+  danger = false,
+  onPress,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  danger?: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="menuitem"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 50,
+        paddingHorizontal: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        borderRadius: 12,
+        backgroundColor: pressed ? theme.colors.surfaceMuted : "transparent",
+      })}
+    >
+      <Feather
+        name={icon}
+        size={19}
+        color={danger ? theme.colors.danger : theme.colors.text}
+      />
+      <Text color={danger ? "danger" : undefined}>{label}</Text>
+    </Pressable>
+  );
+}
+
+type ViewedImage = {
+  uri: string;
+  width: number;
+  height: number;
+};
+
+function MessageImageViewer({
+  image,
+  onClose,
+}: {
+  image: ViewedImage;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
+  const viewport = useWindowDimensions();
+  const zoom = useSharedValue(1);
+  const savedZoom = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedX = useSharedValue(0);
+  const savedY = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
+  const viewerOpacity = useSharedValue(0);
+  const viewerScale = useSharedValue(0.96);
+  const closingRef = useRef(false);
+
+  const close = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (reduceMotion) {
+      onClose();
+      return;
+    }
+    backdropOpacity.value = withTiming(0, { duration: 150 });
+    viewerOpacity.value = withTiming(0, { duration: 120 });
+    viewerScale.value = withTiming(0.97, { duration: 150 });
+    setTimeout(onClose, 155);
+  };
+
+  const reveal = () => {
+    if (reduceMotion) {
+      backdropOpacity.value = 0.94;
+      viewerOpacity.value = 1;
+      viewerScale.value = 1;
+      return;
+    }
+    backdropOpacity.value = withTiming(0.94, { duration: 160 });
+    viewerOpacity.value = withTiming(1, { duration: 170 });
+    viewerScale.value = withTiming(1, { duration: 210 });
+  };
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((event) => {
+      zoom.value = Math.min(4, Math.max(1, savedZoom.value * event.scale));
+    })
+    .onEnd(() => {
+      savedZoom.value = zoom.value;
+      if (zoom.value <= 1.02) {
+        zoom.value = withTiming(1);
+        savedZoom.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedX.value = 0;
+        savedY.value = 0;
+      }
+    });
+  const pan = Gesture.Pan()
+    .onUpdate((event) => {
+      if (zoom.value <= 1) return;
+      const maxX = (viewport.width * (zoom.value - 1)) / 2;
+      const maxY = (viewport.height * (zoom.value - 1)) / 2;
+      translateX.value = Math.min(maxX, Math.max(-maxX, savedX.value + event.translationX));
+      translateY.value = Math.min(maxY, Math.max(-maxY, savedY.value + event.translationY));
+    })
+    .onEnd(() => {
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+    });
+  const gesture = Gesture.Simultaneous(pinch, pan);
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
+  const imageStyle = useAnimatedStyle(() => ({
+    opacity: viewerOpacity.value,
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: zoom.value * viewerScale.value },
+    ],
+  }));
+  const controlsStyle = useAnimatedStyle(() => ({
+    opacity: viewerOpacity.value,
+  }));
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={close}
+    >
+      <View style={{ flex: 1, backgroundColor: "transparent" }}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              backgroundColor: "#000",
+            },
+            backdropStyle,
+          ]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close image viewer"
+          onPress={close}
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+          }}
+        />
+        <GestureDetector gesture={gesture}>
+          <Animated.View
+            style={[
+              {
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              },
+              imageStyle,
+            ]}
+          >
+            <Image
+              source={{ uri: image.uri }}
+              accessibilityLabel="Full-screen private message image"
+              resizeMode="contain"
+              onLoad={reveal}
+              onError={reveal}
+              style={{ width: viewport.width, height: viewport.height }}
+            />
+          </Animated.View>
+        </GestureDetector>
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: Math.max(insets.top, 12),
+              right: 16,
+            },
+            controlsStyle,
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close image"
+            onPress={close}
+            hitSlop={12}
+            style={({ pressed }) => ({
+              width: 42,
+              height: 42,
+              borderRadius: 21,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255, 255, 255, 0.14)",
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Feather name="x" size={24} color={theme.colors.onPrimary} />
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
@@ -674,6 +1024,8 @@ export function ConversationDetailScreen() {
   const userId = user?.public_id;
   const listRef = useRef<FlatList<ChatItem>>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const peerPresenceIdsRef = useRef(new Set<string>());
+  const appStateRef = useRef(AppState.currentState);
   const pendingSocketMessages = useRef(new Map<string, PendingSocketMessage>());
   const typingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -688,7 +1040,9 @@ export function ConversationDetailScreen() {
   const [localPending, setLocalPending] = useState<ChatItem[]>([]);
   const draftById = useRef(new Map<string, MessageDraft>());
   const [imageError, setImageError] = useState("");
+  const [viewedImage, setViewedImage] = useState<ViewedImage | null>(null);
   const [typingName, setTypingName] = useState("");
+  const [peerOnline, setPeerOnline] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [realtime, setRealtime] = useState<"connecting" | "live" | "fallback">(
     "connecting",
@@ -739,15 +1093,6 @@ export function ConversationDetailScreen() {
       );
     } catch { /* Keep the current timeline; the next reconnect can retry. */ }
   }, [conversationId, queryClient, userId]);
-  useEffect(() => {
-    if (!conversationId) return;
-    let previousState = AppState.currentState;
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active" && previousState !== "active") void refreshLatestMessages();
-      previousState = state;
-    });
-    return () => subscription.remove();
-  }, [conversationId, refreshLatestMessages]);
   const stopTyping = useCallback(() => {
     if (typingStopRef.current) clearTimeout(typingStopRef.current);
     typingStopRef.current = null;
@@ -784,6 +1129,24 @@ export function ConversationDetailScreen() {
     }
     startTyping();
   };
+  useEffect(() => {
+    if (!conversationId) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      const wasActive = appStateRef.current === "active";
+      appStateRef.current = state;
+      const socket = socketRef.current;
+      if (state === "active") {
+        if (!wasActive) void refreshLatestMessages();
+        if (socket?.readyState === WebSocket.OPEN)
+          socket.send(JSON.stringify({ type: "presence.active" }));
+      } else {
+        stopTyping();
+        if (socket?.readyState === WebSocket.OPEN)
+          socket.send(JSON.stringify({ type: "presence.inactive" }));
+      }
+    });
+    return () => subscription.remove();
+  }, [conversationId, refreshLatestMessages, stopTyping]);
   const sendTextOverSocket = useCallback(
     (text: string, messageId: string, replyToPublicId?: string) =>
       new Promise<Message>((resolve, reject) => {
@@ -935,6 +1298,7 @@ export function ConversationDetailScreen() {
   }, [conversationId, latestIncomingMessageId]);
   useEffect(() => {
     let stopped = false;
+    const peerPresenceIds = peerPresenceIdsRef.current;
     let socket: WebSocket | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -952,6 +1316,8 @@ export function ConversationDetailScreen() {
     const connect = async () => {
       try {
         setRealtime("connecting");
+        peerPresenceIds.clear();
+        setPeerOnline(false);
         if (!hasRealtimeTransport()) {
           setRealtime("fallback");
           return;
@@ -984,6 +1350,8 @@ export function ConversationDetailScreen() {
               lastPongAt = Date.now();
               if (readyTimer) clearTimeout(readyTimer);
               setRealtime("live");
+              if (appStateRef.current !== "active")
+                socket?.send(JSON.stringify({ type: "presence.inactive" }));
               if (hasBeenReady) void refreshLatestMessages();
               hasBeenReady = true;
               if (bodyRef.current.trim() && socket?.readyState === WebSocket.OPEN) {
@@ -999,6 +1367,16 @@ export function ConversationDetailScreen() {
                     () => setTypingName(""),
                     5000,
                   );
+              }
+            } else if (payload.type === "conversation.presence") {
+              if (
+                payload.user_public_id !== user?.public_id &&
+                typeof payload.connection_id === "string"
+              ) {
+                if (payload.online)
+                  peerPresenceIds.add(payload.connection_id);
+                else peerPresenceIds.delete(payload.connection_id);
+                setPeerOnline(peerPresenceIds.size > 0);
               }
             } else if (payload.type === "message.created") {
               setTypingName("");
@@ -1058,6 +1436,8 @@ export function ConversationDetailScreen() {
           if (socketRef.current === socket) socketRef.current = null;
           stopTyping();
           setTypingName("");
+          peerPresenceIds.clear();
+          setPeerOnline(false);
           if (!stopped) {
             setRealtime("fallback");
             retry = setTimeout(connect, Math.min(30_000, 2000 * 2 ** Math.min(failures++, 4)));
@@ -1078,6 +1458,8 @@ export function ConversationDetailScreen() {
       if (heartbeat) clearInterval(heartbeat);
       rejectPendingSocketMessages();
       stopTyping();
+      peerPresenceIds.clear();
+      setPeerOnline(false);
       socketRef.current = null;
       socket?.close();
     };
@@ -1134,10 +1516,11 @@ export function ConversationDetailScreen() {
 
   return (
     <Guard>
-      <SafeAreaView
-        edges={["top", "left", "right"]}
-        style={{ flex: 1, backgroundColor: theme.colors.background }}
-      >
+      <>
+        <SafeAreaView
+          edges={["top", "left", "right"]}
+          style={{ flex: 1, backgroundColor: theme.colors.background }}
+        >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -1196,16 +1579,18 @@ export function ConversationDetailScreen() {
                       height: 6,
                       borderRadius: 3,
                       backgroundColor:
-                        realtime === "live"
+                        typingName || peerOnline
                           ? theme.colors.success
-                          : theme.colors.accent,
+                          : theme.colors.textMuted,
                     }}
                   />
                   <Text variant="caption" color="muted">
                     {typingName
                       ? `${typingName} is typing…`
+                      : peerOnline
+                      ? "Online"
                       : realtime === "live"
-                      ? "Live"
+                        ? "Offline"
                       : realtime === "connecting"
                         ? "Connecting…"
                         : "Reconnecting…"}
@@ -1217,12 +1602,23 @@ export function ConversationDetailScreen() {
               ref={listRef}
               data={newestFirst}
               inverted
-              keyExtractor={(item) => item.public_id}
+              keyExtractor={(item) =>
+                item.client_message_id || item.public_id
+              }
               renderItem={({ item }) => (
                 <ChatMessage
                   message={item}
                   mine={item.sender_public_id === user?.public_id}
                   imageUri={imageUriFor(item)}
+                  onOpenImage={() => {
+                    const uri = imageUriFor(item);
+                    if (!uri || !item.attachment) return;
+                    setViewedImage({
+                      uri,
+                      width: item.attachment.width,
+                      height: item.attachment.height,
+                    });
+                  }}
                   onReply={() => { setReplyTo(item); listRef.current?.scrollToOffset({ offset: 0, animated: true }); }}
                   onDelete={(mode) => remove.mutate({ id: item.public_id, mode })}
                   onRetry={() => {
@@ -1250,7 +1646,7 @@ export function ConversationDetailScreen() {
               ListFooterComponent={
                 messages.isFetchingNextPage ? (
                   <LoadingIndicator />
-                ) : null
+                ) : undefined
               }
               ListEmptyComponent={
                 messages.isLoading ? (
@@ -1467,7 +1863,14 @@ export function ConversationDetailScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+        </SafeAreaView>
+        {viewedImage ? (
+          <MessageImageViewer
+            image={viewedImage}
+            onClose={() => setViewedImage(null)}
+          />
+        ) : null}
+      </>
     </Guard>
   );
 }

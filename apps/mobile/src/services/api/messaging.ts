@@ -1,5 +1,3 @@
-import { Platform } from "react-native";
-
 import { apiGet, apiPost, apiPostForm } from "./client";
 import { API_BASE_URL, REALTIME_API_BASE_URL } from "./config";
 import {
@@ -8,6 +6,7 @@ import {
   messageSchema,
   ticketSchema,
 } from "./messageSchemas";
+import { appendAssetToFormData, type MultipartAsset } from "./multipart";
 
 export type { Conversation, Message } from "./messageSchemas";
 
@@ -40,10 +39,7 @@ export async function getMessages(id: string, cursorUrl?: string) {
     ),
   );
 }
-export type MessageImageAsset = {
-  uri: string;
-  fileName?: string | null;
-  mimeType?: string | null;
+export type MessageImageAsset = MultipartAsset & {
   width?: number;
   height?: number;
 };
@@ -66,16 +62,7 @@ export async function sendMessage(
   form.append("body", body);
   form.append("client_message_id", clientMessageId);
   if (replyToPublicId) form.append("reply_to_public_id", replyToPublicId);
-  if (Platform.OS === "web") {
-    const blob = await fetch(image.uri).then((response) => response.blob());
-    form.append("file", blob, image.fileName || "message-image.jpg");
-  } else {
-    form.append("file", {
-      uri: image.uri,
-      name: image.fileName || "message-image.jpg",
-      type: image.mimeType || "image/jpeg",
-    } as unknown as Blob);
-  }
+  await appendAssetToFormData(form, "file", image, "message-image.jpg");
   return messageSchema.parse(
     await apiPostForm<unknown>(`/conversations/${id}/messages/`, form),
   );

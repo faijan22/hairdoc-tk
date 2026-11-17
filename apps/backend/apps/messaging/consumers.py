@@ -1,7 +1,7 @@
 from collections import deque
 from urllib.parse import parse_qs
 from time import monotonic
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import JsonWebsocketConsumer
@@ -27,15 +27,24 @@ class ConversationConsumer(JsonWebsocketConsumer):
         self.scope["user"] = ticket.user
         self.conversation = ticket.conversation
         self.group_name = conversation_group(self.conversation.public_id)
+        self.connection_id = str(uuid4())
+        self.presence_active = True
         self.last_typing_event_at = 0.0
         self.last_typing_state = False
         self.message_times = deque()
         async_to_sync(self.channel_layer.group_add)(self.group_name, self.channel_name)
         self.accept()
         self.send_json({"type": "realtime.ready", "conversation_public_id": str(self.conversation.public_id)})
+        self._broadcast_presence(True)
+        async_to_sync(self.channel_layer.group_send)(self.group_name, {
+            "type": "conversation.presence.query",
+            "requester_channel_name": self.channel_name,
+            "requester_user_public_id": str(self.scope["user"].public_id),
+        })
 
     def disconnect(self, close_code):
         if hasattr(self, "group_name"):
+            self._broadcast_presence(False)
             async_to_sync(self.channel_layer.group_send)(self.group_name, {
                 "type": "conversation.typing",
                 "user_public_id": str(self.scope["user"].public_id),
@@ -65,8 +74,28 @@ class ConversationConsumer(JsonWebsocketConsumer):
                 ),
                 "is_typing": is_typing,
             })
+        elif content.get("type") in {"presence.active", "presence.inactive"}:
+            active = content["type"] == "presence.active"
+            if active != self.presence_active:
+                self.presence_active = active
+                self._broadcast_presence(active)
         else:
             self.send_json({"type": "error", "code": "UNSUPPORTED_EVENT"})
+
+    def _user_name(self):
+        return (
+            f'{self.scope["user"].first_name} {self.scope["user"].last_name}'.strip()
+            or self.scope["user"].email
+        )
+
+    def _broadcast_presence(self, online):
+        async_to_sync(self.channel_layer.group_send)(self.group_name, {
+            "type": "conversation.presence",
+            "user_public_id": str(self.scope["user"].public_id),
+            "user_name": self._user_name(),
+            "connection_id": self.connection_id,
+            "online": online,
+        })
 
     def _create_text_message(self, content):
         client_message_id = str(content.get("client_message_id", ""))
@@ -129,6 +158,30 @@ class ConversationConsumer(JsonWebsocketConsumer):
             "user_name": event["user_name"],
             "is_typing": event["is_typing"],
         })
+
+    def conversation_presence_query(self, event):
+        if (
+            self.presence_active
+            and event["requester_channel_name"] != self.channel_name
+            and event["requester_user_public_id"] != str(self.scope["user"].public_id)
+        ):
+            async_to_sync(self.channel_layer.send)(event["requester_channel_name"], {
+                "type": "conversation.presence",
+                "user_public_id": str(self.scope["user"].public_id),
+                "user_name": self._user_name(),
+                "connection_id": self.connection_id,
+                "online": True,
+            })
+
+    def conversation_presence(self, event):
+        if event["user_public_id"] != str(self.scope["user"].public_id):
+            self.send_json({
+                "type": "conversation.presence",
+                "user_public_id": event["user_public_id"],
+                "user_name": event["user_name"],
+                "connection_id": event["connection_id"],
+                "online": event["online"],
+            })
 
 
 class InboxConsumer(JsonWebsocketConsumer):

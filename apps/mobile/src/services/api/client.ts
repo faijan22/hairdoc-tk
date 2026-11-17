@@ -1,3 +1,4 @@
+import { fetch as expoFetch } from "expo/fetch";
 import { Platform } from "react-native";
 
 import { API_BASE_URL } from "./config";
@@ -52,7 +53,8 @@ export async function apiRequest<T>(
   try {
     const accessToken = authenticate ? getAccessToken() : null;
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const request = isForm ? expoFetch : fetch;
+    const response = await request(`${API_BASE_URL}${path}`, {
       method,
       credentials: "include",
       headers: {
@@ -81,6 +83,8 @@ export async function apiRequest<T>(
       payload = JSON.parse(responseText) as T & ErrorEnvelope;
     } catch {
       if (!response.ok) {
+        if (__DEV__)
+          console.warn(`[HairDoc API] ${method} ${path} returned ${response.status} without JSON.`);
         throw new ApiError(
           response.status >= 500
             ? "The server could not complete this request."
@@ -96,6 +100,8 @@ export async function apiRequest<T>(
       );
     }
     if (!response.ok) {
+      if (__DEV__)
+        console.warn(`[HairDoc API] ${method} ${path} returned ${response.status}.`);
       throw new ApiError(
         payload?.error?.message ||
           `Request failed with status ${response.status}.`,
@@ -114,6 +120,10 @@ export async function apiRequest<T>(
         "REQUEST_TIMEOUT",
       );
     }
+    if (__DEV__ && error instanceof Error)
+      console.warn(
+        `[HairDoc API] ${method} ${path} failed before receiving a response: ${error.name}: ${error.message}`,
+      );
     throw new ApiError(
       "The app could not reach the backend. Check the local server and Expo tunnel.",
       0,

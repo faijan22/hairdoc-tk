@@ -1,5 +1,5 @@
 import { ComponentProps, forwardRef, ReactNode, useState } from "react";
-import { TextInput, View } from "react-native";
+import { TextInput, type TextInputInstance, View } from "react-native";
 
 import { AppText } from "./AppText";
 
@@ -11,7 +11,7 @@ type TextFieldProps = ComponentProps<typeof TextInput> & {
   endAdornment?: ReactNode;
 };
 
-export const TextField = forwardRef<TextInput, TextFieldProps>(
+export const TextField = forwardRef<TextInputInstance, TextFieldProps>(
   function TextField(
     { label, error, endAdornment, style, onBlur, onFocus, ...props },
     ref,

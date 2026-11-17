@@ -1,6 +1,6 @@
 # HairDoc TK
 
-HairDoc TK is an Expo mobile app with a Django API for photo-first private hair/scalp consultations, booking, Square payments, client↔TK messaging, versioned coaching plans, progress check-ins, and persisted care notifications. Clients upload intake and follow-up photos; TK may arrange an external live call in Messages only when needed. Release hardening remains unbuilt; Phase 2 remains planned only.
+HairDoc TK is an Expo mobile app with a Django API for photo-first private hair/scalp consultations, booking, Stripe payments, client↔TK messaging, versioned coaching plans, progress check-ins, and persisted care notifications. Clients upload intake and follow-up photos; TK may arrange an external live call in Messages only when needed. Release hardening remains unbuilt; Phase 2 remains planned only.
 
 ## Current state
 
@@ -16,7 +16,7 @@ HairDoc TK is an Expo mobile app with a Django API for photo-first private hair/
 - Patient camera/library flow requests the relevant native permission at the moment of use, then performs safe JPEG normalization, upload/retry/delete feedback, short-lived signed reads, access audit, and read-only final submission.
 - Expert-assignment-gated TK workspace shows the latest submitted photo review and provides client context, intake answers, hair-profile snapshots, photo sets, appointments, messages, availability, and scoped payment activity; Django Admin is configuration/developer fallback.
 - TK-managed recurring hours and date exceptions, server-generated DST-safe slots, patient booking review, 30-minute payment-pending holds, reschedule/cancel, and staff/client appointment views.
-- Server-priced booking: no-charge consultations confirm without creating a payment; paid consultations use Square-hosted Checkout behind a payment adapter, signature-verified/replay-safe webhooks, payment history, and in-app receipts. Card data never enters HairDoc TK.
+- Server-priced booking: no-charge consultations confirm without creating a payment; paid consultations use Stripe-hosted Checkout behind a payment adapter, signature-verified/replay-safe webhooks, payment history, and in-app receipts. Card data never enters HairDoc TK.
 - Consultation-linked one-client/TK messaging with durable PostgreSQL history, optimistic text/private-image sends, typing presence, one-tick `Sent`/two-tick `Read`, idempotent REST writes, foreground-aware alerts, and live Django Channels delivery. Redis is realtime fan-out, not message storage.
 - Photo-first consultations with optional externally arranged calls. `VideoProvider` defaults to disabled; the dormant managed-video adapter cannot create rooms or costs unless explicitly re-enabled later.
 - Consultation-bound coaching plans: the assigned TK account drafts structured guidance/recommendations in the app, publishing locks that version, and only the owning client can read it.
@@ -88,24 +88,22 @@ For TK access, edit the intended account email and mark it `is_staff` and email-
 
 Before patients can book, TK must open **Manage availability** in the app and save at least one weekly interval or extra-hours exception. The same database-backed rules are editable in Django Admin. Assign TK as the consultation service's expert in Django Admin when more than one staff account exists; with exactly one active staff account the backend safely uses that account. Client times are displayed in the device timezone, while rules remain in TK's chosen IANA timezone.
 
-For a no-charge service, booking atomically confirms the appointment and creates its private client↔TK conversation without contacting Square. For a paid service, booking creates an approximately 30-minute `PAYMENT_PENDING` hold and opens Square-hosted Checkout. The app never treats the return page as proof of payment: only a signature-verified Square webhook can mark payment successful and atomically confirm the appointment. Expired unpaid holds are released.
+For a no-charge service, booking atomically confirms the appointment and creates its private client↔TK conversation without contacting Stripe. For a paid service, booking creates an approximately 30-minute `PAYMENT_PENDING` hold and opens Stripe-hosted Checkout. The app never treats the return page as proof of payment: only a signature-verified Stripe webhook can mark payment successful and atomically confirm the appointment. Expired unpaid holds are released.
 
-### Square sandbox setup
+### Stripe test-mode setup
 
-Create a Square developer application connected to TK's Square seller account. Add only server credentials to `apps/backend/.env`:
+Create or use TK's Stripe account. Copy only **test-mode** server credentials into ignored `apps/backend/.env`—never paste them into source control or chat:
 
 ```dotenv
-SQUARE_ENVIRONMENT=sandbox
-SQUARE_ACCESS_TOKEN=...
-SQUARE_LOCATION_ID=...
-SQUARE_WEBHOOK_SIGNATURE_KEY=...
-SQUARE_WEBHOOK_NOTIFICATION_URL=https://<public-api>/api/v1/integrations/square/webhook/
+STRIPE_ENVIRONMENT=test
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 PAYMENT_RETURN_BASE_URL=https://<public-api>/api/v1/payments/return
 ```
 
-In Square Developer Console, use the exact same HTTPS notification URL and subscribe to `payment.created`, `payment.updated`, `refund.created`, and `refund.updated`. The exact URL and raw request body are part of Square's HMAC verification. The Expo Metro bridge is intentionally not a public webhook host; sandbox webhook testing therefore needs an approved temporary HTTPS API tunnel or a hosted development API.
+For local testing, use Stripe CLI to forward `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `refund.created`, `refund.updated`, and `refund.failed` to `http://127.0.0.1:8000/api/v1/integrations/stripe/webhook/`; copy the CLI's temporary `whsec_...` secret into `.env`, then restart Django. For a shared development API, configure the same events on its stable HTTPS Stripe webhook endpoint. The Expo Metro bridge is not a public webhook host.
 
-Returning from Safari to Expo Go may be manual locally; the app refreshes payment state when active. Production requires Square production credentials, TK's real location ID, an HTTPS API/return URL, and a successfully tested webhook. Square Payment Links have no monthly fee, but TK pays Square's current online processing fee per completed transaction.
+Use Stripe's documented test cards only; no real charge occurs in test mode. Returning from Safari to Expo Go may be manual locally; the app refreshes payment state when active. Production requires `STRIPE_ENVIRONMENT=production`, a live `sk_live_`/`rk_live_` key, the production endpoint's own `whsec_` secret, HTTPS API/return URLs, and a separately tested live-mode webhook. Never reuse test webhook secrets in live mode.
 
 ### Video decision
 
@@ -215,7 +213,7 @@ apps/
     apps/progress/          check-ins, private follow-up photos, comparison, expert feedback
     apps/notifications/     notification centre, reminders, email/push delivery lifecycle
     apps/video/             disabled default + dormant provider abstraction
-    apps/payments/          orders, Square checkout/webhooks, receipts/refunds
+    apps/payments/          orders, Stripe checkout/webhooks, receipts/refunds
     apps/private_media/     reusable private-file metadata and storage provider
     config/settings/        base, development, production
     requirements/

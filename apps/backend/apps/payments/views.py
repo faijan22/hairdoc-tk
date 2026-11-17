@@ -107,15 +107,18 @@ class StaffPaymentDetailView(APIView):
         return Response(StaffPaymentSerializer(payment).data)
 
 
-class SquareWebhookView(APIView):
+class StripeWebhookView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"status": "ready", "provider": "stripe"})
 
     def post(self, request):
         try:
             event = parse_and_process_webhook(
                 request.body,
-                request.headers.get("X-Square-HmacSha256-Signature", ""),
+                request.headers.get("Stripe-Signature", ""),
             )
         except PaymentError as exc:
             raise ValidationError(exc.details) from None
@@ -125,7 +128,7 @@ class SquareWebhookView(APIView):
 def payment_return_success(request):
     return _return_page(
         "Payment submitted",
-        "Square has returned your payment. Go back to HairDoc TK while the secure confirmation finishes.",
+        "Stripe has returned your payment. Go back to HairDoc TK while the secure confirmation finishes.",
     )
 
 

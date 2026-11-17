@@ -113,7 +113,7 @@ def create_checkout(user, order):
         raise PaymentError({"checkout": [str(exc)]}, unavailable=True) from None
     except Exception:
         attempt.status = PaymentAttempt.Status.FAILED
-        attempt.safe_error = "Square could not create the checkout session."
+        attempt.safe_error = "The payment provider could not create the checkout session."
         attempt.save(update_fields=("status", "safe_error", "updated_at"))
         payment.status = Payment.Status.FAILED
         payment.failure_code = "PROVIDER_ERROR"
@@ -147,11 +147,11 @@ def parse_and_process_webhook(payload: bytes, signature: str):
     try:
         event = provider.parse_webhook(payload, signature)
     except Exception as exc:
-        raise PaymentError({"signature": ["The Square webhook signature is invalid."]}) from exc
-    event_id = str(event.get("event_id") or "")
+        raise PaymentError({"signature": ["The payment webhook signature is invalid."]}) from exc
+    event_id = str(event.get("id") or event.get("event_id") or "")
     event_type = str(event.get("type") or "")
     if not event_id or not event_type:
-        raise PaymentError({"event": ["Square webhook identity is missing."]})
+        raise PaymentError({"event": ["Payment webhook identity is missing."]})
     digest = hashlib.sha256(payload).hexdigest()
     with transaction.atomic():
         record, created = WebhookEvent.objects.select_for_update().get_or_create(
@@ -168,7 +168,7 @@ def parse_and_process_webhook(payload: bytes, signature: str):
             if record.status in (WebhookEvent.Status.PROCESSED, WebhookEvent.Status.IGNORED):
                 return record
             provider_object = (event.get("data") or {}).get("object") or {}
-            handled = _process_provider_event(event_type, provider_object)
+            handled = _process_provider_event(provider.code, event_type, provider_object)
             record.status = WebhookEvent.Status.PROCESSED if handled else WebhookEvent.Status.IGNORED
             record.processed_at = timezone.now()
             record.safe_error = ""
@@ -183,39 +183,53 @@ def parse_and_process_webhook(payload: bytes, signature: str):
         raise
 
 
-def _process_provider_event(event_type, provider_object):
-    if event_type in {"payment.created", "payment.updated"}:
-        return _process_square_payment(provider_object.get("payment") or {})
-    if event_type in {"refund.created", "refund.updated"}:
-        return _process_square_refund(provider_object.get("refund") or {})
+def _process_provider_event(provider_code, event_type, provider_object):
+    if provider_code == "STRIPE" and event_type in {
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+        "checkout.session.async_payment_failed",
+        "checkout.session.expired",
+    }:
+        return _process_stripe_checkout(event_type, provider_object)
+    if provider_code == "STRIPE" and event_type in {"refund.created", "refund.updated", "refund.failed"}:
+        return _process_stripe_refund(provider_object)
     return False
 
 
-def _process_square_payment(square_payment):
-    square_order_id = str(square_payment.get("order_id") or "")
-    if not square_order_id:
-        raise PaymentError({"event": ["Square payment is missing its order reference."]})
+def _process_stripe_checkout(event_type, stripe_session):
+    session_id = str(stripe_session.get("id") or "")
+    if not session_id:
+        return False
     try:
         payment = Payment.objects.select_for_update().select_related("order__appointment").get(
-            provider="SQUARE", provider_order_id=square_order_id,
+            provider="STRIPE", provider_checkout_session_id=session_id,
         )
     except Payment.DoesNotExist:
-        raise PaymentError({"event": ["The Square order is not known to HairDoc TK."]}) from None
+        return False
 
-    status = str(square_payment.get("status") or "")
-    provider_payment_id = str(square_payment.get("id") or "")
-    if payment.provider_payment_id and provider_payment_id != payment.provider_payment_id:
-        raise PaymentError({"event": ["The Square payment does not match this order."]})
+    order_reference = str(stripe_session.get("client_reference_id") or "")
+    metadata_reference = str((stripe_session.get("metadata") or {}).get("hairdoc_order_id") or "")
+    if order_reference != str(payment.order.public_id) or (
+        metadata_reference and metadata_reference != str(payment.order.public_id)
+    ):
+        raise PaymentError({"event": ["The Stripe checkout does not match this order."]})
+
+    payment_intent = stripe_session.get("payment_intent")
+    if isinstance(payment_intent, dict):
+        payment_intent = payment_intent.get("id")
+    provider_payment_id = str(payment_intent or "")
+    if payment.provider_payment_id and provider_payment_id and provider_payment_id != payment.provider_payment_id:
+        raise PaymentError({"event": ["The Stripe payment does not match this order."]})
     settled = {
         Payment.Status.SUCCEEDED, Payment.Status.REFUND_PENDING,
         Payment.Status.PARTIALLY_REFUNDED, Payment.Status.REFUNDED,
     }
     attempt = payment.attempts.filter(status=PaymentAttempt.Status.OPEN).first()
-    if status == "COMPLETED":
-        _validate_square_money(
-            payment.order,
-            square_payment.get("total_money") or square_payment.get("amount_money") or {},
-        )
+    payment_status = str(stripe_session.get("payment_status") or "")
+    if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"} and payment_status == "paid":
+        _validate_stripe_money(payment.order, stripe_session)
+        if not provider_payment_id:
+            raise PaymentError({"event": ["Stripe payment intent is missing."]})
         if payment.status in settled:
             return True
         now = timezone.now()
@@ -239,19 +253,32 @@ def _process_square_payment(square_payment):
 
     if payment.status in settled:
         return True
-    if status in {"APPROVED", "PENDING"}:
+    if event_type == "checkout.session.completed" and payment_status == "unpaid":
         payment.status = Payment.Status.PROCESSING
         payment.save(update_fields=("status", "updated_at"))
         return True
-    if status in {"CANCELED", "FAILED"}:
+    if event_type == "checkout.session.async_payment_failed":
         if attempt:
             attempt.status = PaymentAttempt.Status.FAILED
-            attempt.safe_error = "Square reported that the payment did not complete."
+            attempt.safe_error = "Stripe reported that the payment did not complete."
             attempt.save(update_fields=("status", "safe_error", "updated_at"))
         payment.status = Payment.Status.FAILED
         payment.failure_code = "PAYMENT_FAILED"
         payment.failure_message = "Payment did not complete. You can try again while the reservation is active."
         payment.save(update_fields=("status", "failure_code", "failure_message", "updated_at"))
+        return True
+    if event_type == "checkout.session.expired":
+        if attempt:
+            attempt.status = PaymentAttempt.Status.EXPIRED
+            attempt.safe_error = "Stripe checkout expired before payment completed."
+            attempt.save(update_fields=("status", "safe_error", "updated_at"))
+        payment.status = Payment.Status.CANCELLED
+        payment.failure_code = "CHECKOUT_EXPIRED"
+        payment.failure_message = "Checkout expired. Reserve another appointment time to try again."
+        payment.save(update_fields=("status", "failure_code", "failure_message", "updated_at"))
+        payment.order.status = Order.Status.EXPIRED
+        payment.order.save(update_fields=("status", "updated_at"))
+        _expire_appointment(payment.order.appointment, "Stripe checkout expired before payment completed.")
         return True
     return False
 
@@ -265,7 +292,7 @@ def _confirm_or_flag_late_payment(payment):
         appointment.save(update_fields=("status", "reservation_expires_at", "updated_at"))
         AppointmentStatusHistory.objects.create(
             appointment=appointment, from_status=previous, to_status=Appointment.Status.CONFIRMED,
-            note="Confirmed by verified Square payment webhook.",
+            note="Confirmed by verified Stripe payment webhook.",
         )
         from apps.messaging.services import ensure_consultation_conversation
         from apps.notifications.services import notify_appointment_confirmed
@@ -287,38 +314,43 @@ def _confirm_or_flag_late_payment(payment):
         payment.order.save(update_fields=("status", "updated_at"))
 
 
-def _process_square_refund(square_refund):
-    provider_payment_id = str(square_refund.get("payment_id") or "")
+def _process_stripe_refund(stripe_refund):
+    payment_intent = stripe_refund.get("payment_intent")
+    if isinstance(payment_intent, dict):
+        payment_intent = payment_intent.get("id")
+    provider_payment_id = str(payment_intent or "")
+    if not provider_payment_id:
+        return False
     try:
         payment = Payment.objects.select_for_update().select_related("order").get(
-            provider="SQUARE", provider_payment_id=provider_payment_id,
+            provider="STRIPE", provider_payment_id=provider_payment_id,
         )
     except Payment.DoesNotExist:
-        raise PaymentError({"event": ["The refund references an unknown Square payment."]}) from None
-    money = square_refund.get("amount_money") or {}
-    currency = str(money.get("currency") or "").upper()
-    amount_minor = money.get("amount")
+        return False
+    currency = str(stripe_refund.get("currency") or "").upper()
+    amount_minor = stripe_refund.get("amount")
     if currency != payment.currency or not isinstance(amount_minor, int) or amount_minor <= 0:
-        raise PaymentError({"event": ["Square refund amount or currency is invalid."]})
+        raise PaymentError({"event": ["Stripe refund amount or currency is invalid."]})
     amount = Decimal(amount_minor) / (1 if currency in _ZERO_DECIMAL_CURRENCIES else 100)
     if amount > payment.amount:
-        raise PaymentError({"event": ["Square refund exceeds the original payment."]})
-    provider_refund_id = str(square_refund.get("id") or "")
+        raise PaymentError({"event": ["Stripe refund exceeds the original payment."]})
+    provider_refund_id = str(stripe_refund.get("id") or "")
     if not provider_refund_id:
-        raise PaymentError({"event": ["Square refund ID is missing."]})
+        raise PaymentError({"event": ["Stripe refund ID is missing."]})
     mapped_status = {
-        "PENDING": Refund.Status.PROCESSING,
-        "COMPLETED": Refund.Status.SUCCEEDED,
-        "FAILED": Refund.Status.FAILED,
-        "REJECTED": Refund.Status.FAILED,
-    }.get(str(square_refund.get("status") or ""), Refund.Status.PROCESSING)
+        "pending": Refund.Status.PROCESSING,
+        "requires_action": Refund.Status.PROCESSING,
+        "succeeded": Refund.Status.SUCCEEDED,
+        "failed": Refund.Status.FAILED,
+        "canceled": Refund.Status.FAILED,
+    }.get(str(stripe_refund.get("status") or ""), Refund.Status.PROCESSING)
     refund = payment.refunds.filter(provider_refund_id=provider_refund_id).first()
     if not refund:
         refund = payment.refunds.filter(
             provider_refund_id="", status=Refund.Status.REQUESTED, amount=amount,
         ).first()
     if not refund:
-        refund = Refund(payment=payment, amount=amount, currency=currency, reason="Refund recorded by Square.")
+        refund = Refund(payment=payment, amount=amount, currency=currency, reason="Refund recorded by Stripe.")
     refund.provider_refund_id = provider_refund_id
     refund.status = mapped_status
     refund.amount = amount
@@ -347,12 +379,12 @@ def _refresh_refund_states(payment):
     payment.order.save(update_fields=("status", "updated_at"))
 
 
-def _validate_square_money(order, money):
+def _validate_stripe_money(order, stripe_session):
     if (
-        money.get("amount") != _minor_units(order.total_amount, order.currency)
-        or str(money.get("currency") or "").upper() != order.currency
+        stripe_session.get("amount_total") != _minor_units(order.total_amount, order.currency)
+        or str(stripe_session.get("currency") or "").upper() != order.currency
     ):
-        raise PaymentError({"event": ["Square payment amount or currency does not match the order."]})
+        raise PaymentError({"event": ["Stripe payment amount or currency does not match the order."]})
 
 
 _ZERO_DECIMAL_CURRENCIES = {

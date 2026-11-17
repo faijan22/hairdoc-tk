@@ -31,7 +31,7 @@ export function ForgotPasswordScreen() {
         <TextField label="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={field.value} onBlur={field.onBlur} onChangeText={field.onChange} error={errors.email?.message} />
       )} />
       {errors.root?.message ? <Text variant="caption" color="danger">{errors.root.message}</Text> : null}
-      <Button loading={isSubmitting} onPress={submit}>Send reset link</Button>
+      <Button loading={isSubmitting} onPress={() => void submit()}>Send reset link</Button>
     </AuthShell>
   );
 }
