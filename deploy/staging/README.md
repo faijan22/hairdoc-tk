@@ -8,7 +8,7 @@ Redis and private media are never exposed directly.
 
 Create an `A` record:
 
-- Name: `api-dev.hairdoctk`
+- Name: `hairdoctk-dev`
 - Target: the server's public IPv4 address
 - Proxy: **DNS only** for the first deployment
 
@@ -57,7 +57,7 @@ by Git and must never be committed or posted in chat.
 The Stripe staging destination is:
 
 ```text
-https://api-dev.hairdoctk.livecoder.tech/api/v1/integrations/stripe/webhook/
+https://hairdoctk-dev.livecoder.tech/api/v1/integrations/stripe/webhook/
 ```
 
 ## 4. First deployment
@@ -75,7 +75,7 @@ then verifies internal and public health checks.
 Expected health URL:
 
 ```text
-https://api-dev.hairdoctk.livecoder.tech/api/v1/health/
+https://hairdoctk-dev.livecoder.tech/api/v1/health/
 ```
 
 Create TK's first server account after deployment:
@@ -112,8 +112,8 @@ Run Expo against the hosted API instead of the LAN backend:
 
 ```powershell
 cd apps/mobile
-$env:EXPO_PUBLIC_API_URL="https://api-dev.hairdoctk.livecoder.tech/api/v1"
-$env:EXPO_PUBLIC_REALTIME_API_URL="https://api-dev.hairdoctk.livecoder.tech/api/v1"
+$env:EXPO_PUBLIC_API_URL="https://hairdoctk-dev.livecoder.tech/api/v1"
+$env:EXPO_PUBLIC_REALTIME_API_URL="https://hairdoctk-dev.livecoder.tech/api/v1"
 npx expo start --tunnel --go --clear
 ```
 

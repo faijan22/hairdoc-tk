@@ -23,13 +23,13 @@
 - Mobile is aligned to Expo SDK 58 / React Native 0.88 for the current App Store Expo Go runtime; Expo Doctor, types, lint, 24 tests, and iOS/Android/web production exports pass.
 - Physical-device image uploads use Expo SDK 58 `File`/`Blob` multipart bodies instead of the removed legacy React Native URI object; progress, consultation, and chat photos share the corrected upload path.
 - Staff/client workspace boundaries are enforced in navigation and APIs: TK sees client-care tools instead of Hair Profile/My Appointments, client consultation routes redirect to staff workspaces, and staff accounts cannot create a client hair profile or start a self-consultation.
-- A fail-closed staging deployment stack is ready for `api-dev.hairdoctk.livecoder.tech`: Docker Compose runs PostgreSQL, Redis, Daphne/Channels, Celery worker/beat and Caddy HTTPS; server bootstrap and one-command Git/migration/restart deployment scripts are included.
+- A fail-closed staging deployment stack is ready for `hairdoctk-dev.livecoder.tech`: Docker Compose runs PostgreSQL, Redis, Daphne/Channels, Celery worker/beat and Caddy HTTPS; server bootstrap and one-command Git/migration/restart deployment scripts are included.
 
 ## Remaining activation and acceptance
 
 - Revoke the previously exposed Square tokens and remove legacy `SQUARE_*` lines from the ignored local `.env`; the application no longer reads them.
 - Stripe test-mode secret key is configured in ignored `apps/backend/.env`; rotate it after development because it was shared through chat.
-- Point `api-dev.hairdoctk.livecoder.tech` through Cloudflare to the staging server, create the ignored server `deploy/staging/.env`, run the first deployment, and verify HTTPS/WSS plus unchallenged signed POST delivery at `/api/v1/integrations/stripe/webhook/`.
+- Point `hairdoctk-dev.livecoder.tech` through Cloudflare to the staging server, create the ignored server `deploy/staging/.env`, run the first deployment, and verify HTTPS/WSS plus unchallenged signed POST delivery at `/api/v1/integrations/stripe/webhook/`.
 - Correct/recreate the Stripe Sandbox destination with a current payload version, subscribe to the seven approved checkout/refund events, and put its final `whsec_...` value in ignored `apps/backend/.env` as `STRIPE_WEBHOOK_SECRET`.
 - Apply migration `payments.0004_stripe_provider`.
 - Complete one positive-price booking with a Stripe test card and verify payment, order, appointment, conversation, duplicate-event idempotency, failure/expiry, and refund records.
