@@ -1,7 +1,7 @@
 # HairDoc TK staging deployment
 
 This stack runs the Django ASGI API, WebSockets, PostgreSQL, Redis, Celery worker
-and Celery beat. Daphne is published only on `127.0.0.1:8010`; the server's
+and Celery beat. Daphne is published only on `127.0.0.1:18010`; the server's
 existing aaPanel Apache installation owns public HTTPS. Database, Redis and
 private media are never exposed directly.
 
@@ -14,7 +14,7 @@ Create an `A` record:
 - Proxy: **DNS only** for the first deployment
 
 Allow inbound SSH, TCP 80 and TCP 443 in the server/provider firewall. Do not
-expose 5432, 6379, 8000 or 8010.
+expose 5432, 6379, 8000 or 18010.
 
 After the first deployment returns a valid HTTPS health response, Cloudflare may
 be switched to proxied mode. Set SSL/TLS to **Full (strict)** and leave WebSockets
@@ -65,7 +65,7 @@ https://hairdoctk-dev.livecoder.tech/api/v1/integrations/stripe/webhook/
 
 In aaPanel, add `hairdoctk-dev.livecoder.tech` as a website and issue its Let's
 Encrypt certificate while Cloudflare is DNS-only. Configure it as a reverse
-proxy to `http://127.0.0.1:8010`, preserve the original host, and enable
+proxy to `http://127.0.0.1:18010`, preserve the original host, and enable
 WebSockets. The equivalent Apache directives are in
 `deploy/staging/apache-proxy.conf.example`; place them inside the site's HTTPS
 virtual host if configuring Apache directly. Do not edit the global Apache
