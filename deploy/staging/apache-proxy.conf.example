@@ -1,0 +1,14 @@
+# Place inside the HTTPS VirtualHost for hairdoctk-dev.livecoder.tech.
+# aaPanel may generate equivalent directives through its Reverse Proxy UI.
+
+ProxyRequests Off
+ProxyPreserveHost On
+ProxyAddHeaders On
+RequestHeader set X-Forwarded-Proto "https"
+
+# Keep WebSocket routing before the catch-all HTTP proxy.
+ProxyPass        "/ws/" "ws://127.0.0.1:8010/ws/" retry=0 timeout=300
+ProxyPassReverse "/ws/" "ws://127.0.0.1:8010/ws/"
+
+ProxyPass        "/" "http://127.0.0.1:8010/" connectiontimeout=5 timeout=120
+ProxyPassReverse "/" "http://127.0.0.1:8010/"

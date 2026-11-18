@@ -1,8 +1,9 @@
 # HairDoc TK staging deployment
 
-This stack runs the Django ASGI API, WebSockets, PostgreSQL, Redis, Celery worker,
-Celery beat and Caddy HTTPS proxy. Only ports 80/443 are published. Database,
-Redis and private media are never exposed directly.
+This stack runs the Django ASGI API, WebSockets, PostgreSQL, Redis, Celery worker
+and Celery beat. Daphne is published only on `127.0.0.1:8010`; the server's
+existing aaPanel Apache installation owns public HTTPS. Database, Redis and
+private media are never exposed directly.
 
 ## 1. Cloudflare
 
@@ -12,8 +13,8 @@ Create an `A` record:
 - Target: the server's public IPv4 address
 - Proxy: **DNS only** for the first deployment
 
-Allow inbound SSH, TCP 80, TCP 443 and UDP 443 in the server/provider firewall.
-Do not expose 5432, 6379 or 8000.
+Allow inbound SSH, TCP 80 and TCP 443 in the server/provider firewall. Do not
+expose 5432, 6379, 8000 or 8010.
 
 After the first deployment returns a valid HTTPS health response, Cloudflare may
 be switched to proxied mode. Set SSL/TLS to **Full (strict)** and leave WebSockets
@@ -60,7 +61,17 @@ The Stripe staging destination is:
 https://hairdoctk-dev.livecoder.tech/api/v1/integrations/stripe/webhook/
 ```
 
-## 4. First deployment
+## 4. aaPanel Apache site
+
+In aaPanel, add `hairdoctk-dev.livecoder.tech` as a website and issue its Let's
+Encrypt certificate while Cloudflare is DNS-only. Configure it as a reverse
+proxy to `http://127.0.0.1:8010`, preserve the original host, and enable
+WebSockets. The equivalent Apache directives are in
+`deploy/staging/apache-proxy.conf.example`; place them inside the site's HTTPS
+virtual host if configuring Apache directly. Do not edit the global Apache
+listener or replace aaPanel-managed certificates.
+
+## 5. First deployment
 
 ```bash
 cd /opt/hairdoc-tk
@@ -69,8 +80,8 @@ bash deploy/staging/deploy.sh
 
 The deploy command performs a fast-forward Git pull, builds the image, starts
 PostgreSQL/Redis, validates fail-closed staging settings, applies migrations,
-collects Admin static files, starts Daphne/Channels, Celery worker/beat and Caddy,
-then verifies internal and public health checks.
+collects and safely serves Admin static files, starts Daphne/Channels and Celery
+worker/beat, then verifies internal and public health checks through Apache.
 
 Expected health URL:
 
@@ -85,7 +96,7 @@ docker compose --env-file deploy/staging/.env -f deploy/staging/compose.yml \
   exec api python manage.py createsuperuser
 ```
 
-## 5. One-command deployments from Windows
+## 6. One-command deployments from Windows
 
 Set these once in the PowerShell session (or as Windows user environment
 variables):
@@ -106,7 +117,7 @@ It refuses a dirty local tree, pushes the committed branch, connects over SSH,
 pulls with `--ff-only`, runs migrations and restarts the complete stack. It never
 copies `.env` or secrets from the developer machine.
 
-## 6. App connection
+## 7. App connection
 
 Run Expo against the hosted API instead of the LAN backend:
 
@@ -125,10 +136,11 @@ Metro proxy and same-Wi-Fi access are no longer involved.
 ```bash
 cd /opt/hairdoc-tk
 docker compose --env-file deploy/staging/.env -f deploy/staging/compose.yml ps
-docker compose --env-file deploy/staging/.env -f deploy/staging/compose.yml logs -f api worker beat proxy
+docker compose --env-file deploy/staging/.env -f deploy/staging/compose.yml logs -f api worker beat
 ```
 
-Named Docker volumes preserve PostgreSQL, Redis, TLS state and staging media
-across deployments. They are not a backup. Encrypted database/media backups and
-a tested restore procedure remain mandatory before real patient data is used.
+Named Docker volumes preserve PostgreSQL, Redis and staging media across
+deployments. aaPanel manages TLS certificates. These are not backups. Encrypted
+database/media backups and a tested restore procedure remain mandatory before
+real patient data is used.
 

@@ -53,8 +53,8 @@ echo "==> Applying database migrations"
 echo "==> Collecting Django Admin static files"
 "${COMPOSE[@]}" run --rm api python manage.py collectstatic --noinput --clear
 
-echo "==> Starting API, realtime messaging, workers, scheduler and HTTPS proxy"
-"${COMPOSE[@]}" up -d --remove-orphans api worker beat proxy
+echo "==> Starting API, realtime messaging, workers and scheduler"
+"${COMPOSE[@]}" up -d --remove-orphans api worker beat
 
 echo "==> Waiting for the API health check"
 for attempt in $(seq 1 30); do
