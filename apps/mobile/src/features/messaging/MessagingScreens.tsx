@@ -150,12 +150,12 @@ export function ConversationListScreen() {
         <Header title="Messages" backHref="/explore" />
         <View style={{ gap: theme.spacing.xs }}>
           <Text variant="display">
-            {isStaff ? "Client conversations." : "Your private conversations."}
+            {isStaff ? "Client conversations." : "Your conversation with TK."}
           </Text>
           <Text color="muted">
             {isStaff
-              ? "One private conversation for each client's confirmed consultation."
-              : "Every conversation is private between you and TK."}
+              ? "One continuous private conversation with each client."
+              : "Your private conversation with TK stays together across consultations."}
           </Text>
         </View>
         {conversations.isLoading ? <LoadingIndicator /> : null}
@@ -182,8 +182,8 @@ export function ConversationListScreen() {
             </Text>
             <Text color="muted" style={{ textAlign: "center" }}>
               {isStaff
-                ? "Client conversations will appear here when their appointments are confirmed."
-                : "Your private conversation with TK will appear here after your appointment is confirmed."}
+                ? "A client's conversation will appear after their first appointment is confirmed."
+                : "Your private conversation with TK will appear after your first appointment is confirmed."}
             </Text>
             <Button
               onPress={() =>
@@ -262,9 +262,6 @@ export function ConversationListScreen() {
                         )}
                       </Text>
                     </View>
-                    <Text variant="caption" color="muted" numberOfLines={1}>
-                      {item.service_name}
-                    </Text>
                     <View
                       style={{
                         flexDirection: "row",

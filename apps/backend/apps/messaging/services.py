@@ -38,6 +38,31 @@ class MessagingError(Exception):
 
 @transaction.atomic
 def ensure_consultation_conversation(appointment):
+    # A private care conversation belongs to the two people, not to one
+    # appointment. Lock both participants in a stable order so simultaneous
+    # payment confirmations cannot create duplicate direct conversations.
+    list(
+        User.objects.select_for_update()
+        .filter(pk__in=(appointment.client_id, appointment.expert_id))
+        .order_by("pk")
+    )
+    conversation = (
+        Conversation.objects.filter(
+            status=Conversation.Status.ACTIVE,
+            members__user_id=appointment.client_id,
+            members__role=ConversationMember.Role.CLIENT,
+        )
+        .filter(
+            members__user_id=appointment.expert_id,
+            members__role=ConversationMember.Role.EXPERT,
+        )
+        .distinct()
+        .order_by("created_at", "id")
+        .first()
+    )
+    if conversation:
+        return conversation
+
     conversation, conversation_created = Conversation.objects.get_or_create(consultation=appointment.case)
     _, client_created = ConversationMember.objects.get_or_create(
         conversation=conversation, user=appointment.client, defaults={"role": ConversationMember.Role.CLIENT},
