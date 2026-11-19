@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import NotificationPreference
 from apps.messaging.models import ConversationMember
@@ -22,8 +23,7 @@ def create_notification(
     preference_field=None, email=False, conversation=None, message=None,
 ):
     preferences = _preferences(recipient)
-    if preference_field and not getattr(preferences, preference_field):
-        return None
+    external_alert_allowed = not preference_field or getattr(preferences, preference_field)
     notification, created = Notification.objects.get_or_create(
         dedupe_key=dedupe_key,
         defaults={
@@ -40,14 +40,18 @@ def create_notification(
         return notification
     transaction.on_commit(lambda: _broadcast_notification(notification.pk))
     push_deliveries = []
-    if preferences.push_enabled:
+    if external_alert_allowed and preferences.push_enabled:
         push_deliveries = [
             PushDelivery(notification=notification, device=device)
-            for device in recipient.push_devices.filter(active=True)
+            for device in recipient.push_devices.filter(
+                active=True,
+                session__revoked_at__isnull=True,
+                session__expires_at__gt=timezone.now(),
+            )
         ]
         PushDelivery.objects.bulk_create(push_deliveries, ignore_conflicts=True)
     email_delivery = None
-    if email and preferences.email_enabled:
+    if external_alert_allowed and email and preferences.email_enabled:
         email_delivery, _ = EmailDelivery.objects.get_or_create(notification=notification)
     if (
         (push_deliveries and settings.PUSH_NOTIFICATIONS_ENABLED)

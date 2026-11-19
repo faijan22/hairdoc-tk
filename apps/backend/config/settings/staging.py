@@ -26,8 +26,10 @@ if urlparse(PAYMENT_RETURN_BASE_URL).scheme != "https":  # noqa: F405
     missing.append("PAYMENT_RETURN_BASE_URL (HTTPS required)")
 if CHANNEL_LAYERS["default"]["BACKEND"] != "channels_redis.core.RedisChannelLayer":  # noqa: F405
     missing.append("USE_REDIS_CHANNEL_LAYER=true")
-if EMAIL_NOTIFICATIONS_ENABLED and EMAIL_BACKEND.endswith("console.EmailBackend"):  # noqa: F405
-    missing.append("EMAIL_BACKEND (real provider required when email is enabled)")
+if EMAIL_BACKEND.endswith("console.EmailBackend"):  # noqa: F405
+    missing.append("EMAIL_BACKEND (real provider required for account email)")
+if EMAIL_BACKEND.endswith("ElasticEmailBackend") and not ELASTIC_EMAIL_API_KEY:  # noqa: F405
+    missing.append("ELASTIC_EMAIL_API_KEY")
 if missing:
     raise ImproperlyConfigured(f"Missing staging configuration: {', '.join(missing)}")
 

@@ -219,7 +219,7 @@ Rules: client lists/details start from user-scoped querysets; clients cannot PAT
 | Files | Private S3-compatible object storage | Metadata in DB; compare storage/egress/backup cost |
 | Chat | Django Channels + PostgreSQL | No chat SaaS initially |
 | Push | Expo Push | Store per-device tokens; process receipts |
-| Email | Low-volume transactional provider adapter | Choose at deployment |
+| Email | Elastic Email transactional HTTPS API v4 behind Django's email backend | API key stays server-side; low-volume auth/care delivery; recheck plan limits before production |
 | Video | `DisabledVideoProvider`; photo/intake/message first, external call arranged manually when needed | $0 app video cost; dormant adapter cannot be enabled or billed without approval |
 | Payments | Stripe-hosted Checkout behind `PaymentProvider` | No monthly/API fee; Stripe processing fee per transaction; verify TK account/country and current rate before launch |
 | TEDx/book/products | Official watch/external buy links; signed download only for TK-authorized files | No video proxy or ecommerce platform |
@@ -271,7 +271,7 @@ Before deployment, add a reproducible backend container/release definition for t
 | 10K | Intake resume integrity | `DONE` | Saved choice/Boolean values rehydrate, every answered step value persists, untouched answers cannot be erased, and completed intake routes cannot reopen editing |
 | 11 | Coaching | `DONE` | Assigned TK drafts/publishes immutable versioned client guidance; migration ships with development startup |
 | 12 | Progress | `DONE` | Real check-ins, consented photos, baseline comparison, TK feedback, tests, and live PostgreSQL migrations complete |
-| 13 | Care notifications | `DONE` | User-scoped centre/badge, lifecycle alerts, timezone reminders, preference-aware email/push delivery, and Expo receipt audit |
+| 13 | Care notifications | `DONE` | Durable in-app centre/realtime badge, session-bound multi-device Expo push, lifecycle cleanup, timezone reminders, external-alert preferences, and receipt audit |
 | 13B | Public entry redesign | `DONE` | Art-directed responsive landing, intentional light brand theme, and authenticated consultation catalogue at UI/API boundaries |
 | 13C | Sign-in/navigation polish | `DONE` | Accessible password reveal and deterministic Home return from Consult, Messages, and Visits root headers |
 | 13D | Tunnel-save interaction repair | `DONE` | Expo-tunneled web uses the secure local API bridge and shared loading buttons remain visually stable |
@@ -376,6 +376,8 @@ Only one row may be `IN PROGRESS`. Details and file limits live in `CURRENT_TASK
 | 082 | Stripe Checkout replaces Square behind the existing payment provider boundary | Accepted/implemented pending test-mode activation; test/live key prefixes are enforced, Stripe hosts card entry, signed timestamped events are fulfillment authority, server order/amount/currency metadata is revalidated, and historical Square rows remain readable without retaining an active Square adapter; supersedes ADR 051 and restores ADR 045's provider choice |
 | 083 | The first hosted environment is isolated staging on the owner's server at `hairdoctk-dev.livecoder.tech`; production remains `api.hairdoctk.com` | Accepted/implemented pending server activation; dedicated fail-closed settings and Docker Compose run PostgreSQL, Redis, localhost-only Daphne/Channels and Celery behind the server's existing aaPanel Apache HTTPS proxy, with persistent staging volumes, Stripe test mode and one-command fast-forward deployment; this environment remains synthetic/test-data-only and cannot become production by swapping credentials |
 | 084 | Align the mobile app to Expo SDK 58, React Native 0.88 and React 19.3 | Accepted/implemented; Expo-managed native dependencies are version-aligned, web remains explicitly static, Expo Doctor/type/lint/tests pass, and production bundles export for iOS, Android and web; supersedes ADR 073 |
+| 085 | In-app notifications are durable product state and never require OS permission; preferences gate only push/email, while each Expo token belongs to one authenticated device session | Accepted/implemented; user-scoped Channels events update the active app, all valid signed-in devices may receive privacy-safe external alerts, logout/revocation/expiry/deletion deactivate delivery, hourly cleanup catches stale legacy sessions, and Expo receipts remove uninstalled/invalid devices; supersedes ADR 068's category-preferences-gate-event-creation rule |
+| 086 | Elastic Email's transactional HTTPS API v4 is the Phase 1 email transport | Accepted/implemented pending credential activation; Django auth and care emails share one API-key backend, server-only `SendHttp` credentials and a verified sender replace SMTP username/password, stable idempotency keys protect retries, and the provider response remains delivery-attempt evidence rather than proof of inbox delivery |
 
 Append rather than silently rewriting decisions. Superseded ADRs must link to their replacement.
 

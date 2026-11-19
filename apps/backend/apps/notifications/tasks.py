@@ -2,12 +2,13 @@ from datetime import timedelta
 
 from celery import shared_task
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.consultations.models import Appointment
 
-from .models import EmailDelivery, Notification, PushDelivery
+from .models import EmailDelivery, Notification, PushDelivery, PushDevice
 from .providers import ExpoPushProvider, PushProviderError
 from .services import notify_appointment_reminder
 
@@ -54,13 +55,13 @@ def deliver_notification(self, notification_id):
         email_delivery.attempt_count += 1
         email_delivery.last_attempt_at = timezone.now()
         try:
-            send_mail(
-                notification.title,
-                f"{notification.body}\n\nOpen the HairDoc TK app to view details.",
-                settings.DEFAULT_FROM_EMAIL,
-                [notification.recipient.email],
-                fail_silently=False,
-            )
+            EmailMessage(
+                subject=notification.title,
+                body=f"{notification.body}\n\nOpen the HairDoc TK app to view details.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[notification.recipient.email],
+                headers={"Idempotency-Key": f"notification-{notification.public_id}"},
+            ).send(fail_silently=False)
             email_delivery.status = EmailDelivery.Status.SENT
             email_delivery.sent_at = timezone.now()
             email_delivery.last_error_code = ""
@@ -126,3 +127,13 @@ def reconcile_push_receipts():
         updated, ("status", "last_error_code", "receipt_checked_at", "updated_at"),
     )
     return len(updated)
+
+
+@shared_task
+def deactivate_stale_push_devices():
+    now = timezone.now()
+    return PushDevice.objects.filter(active=True).filter(
+        Q(session__isnull=True)
+        | Q(session__revoked_at__isnull=False)
+        | Q(session__expires_at__lte=now)
+    ).update(active=False, updated_at=now)

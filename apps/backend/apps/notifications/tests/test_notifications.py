@@ -9,13 +9,14 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import NotificationPreference, User
-from apps.accounts.services import create_device_session
+from apps.accounts.services import create_device_session, revoke_all_user_sessions, revoke_session
 from apps.consultations.models import Appointment, ConsultationCase, ConsultationService
 from apps.messaging.services import create_message, ensure_consultation_conversation
 from apps.notifications.models import EmailDelivery, Notification, PushDelivery, PushDevice
-from apps.notifications.services import notify_appointment_confirmed
+from apps.notifications.services import notify_appointment_confirmed, notify_new_message
 from apps.notifications.tasks import (
     create_due_appointment_reminders,
+    deactivate_stale_push_devices,
     deliver_notification,
     reconcile_push_receipts,
 )
@@ -42,7 +43,7 @@ class MessageNotificationTests(APITestCase):
             client_timezone="Europe/London", expert_timezone="Europe/London",
         )
         self.conversation = ensure_consultation_conversation(self.appointment)
-        access, _, _ = create_device_session(self.client_user, "Notification test")
+        access, _, self.session = create_device_session(self.client_user, "Notification test")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
     def test_device_is_user_scoped_and_message_creates_private_notification(self):
@@ -51,9 +52,10 @@ class MessageNotificationTests(APITestCase):
         }, format="json")
         self.assertEqual(device.status_code, 201)
         self.assertNotIn("Hello", device.json().get("expo_token", ""))
+        self.assertEqual(PushDevice.objects.get().session, self.session)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            message, _ = create_message(self.conversation, self.tk, "Sensitive message text", uuid4())
+        message, _ = create_message(self.conversation, self.tk, "Sensitive message text", uuid4())
+        notify_new_message(message)
         notification = Notification.objects.get(message=message)
         self.assertEqual(notification.recipient, self.client_user)
         self.assertNotIn("Sensitive", notification.body)
@@ -64,13 +66,62 @@ class MessageNotificationTests(APITestCase):
         self.assertEqual(listing.json()["results"][0]["conversation_public_id"], str(self.conversation.public_id))
         self.assertEqual(listing.json()["results"][0]["route"], f"/messages/{self.conversation.public_id}")
 
-    def test_message_preference_suppresses_notification(self):
+    def test_message_preference_suppresses_external_alert_but_keeps_in_app_notification(self):
         NotificationPreference.objects.update_or_create(
             user=self.client_user, defaults={"message_notifications": False},
         )
-        with self.captureOnCommitCallbacks(execute=True):
-            create_message(self.conversation, self.tk, "No alert", uuid4())
-        self.assertFalse(Notification.objects.exists())
+        message, _ = create_message(self.conversation, self.tk, "No external alert", uuid4())
+        notify_new_message(message)
+        notification = Notification.objects.get(message=message)
+        self.assertEqual(notification.recipient, self.client_user)
+        self.assertFalse(PushDelivery.objects.filter(notification=notification).exists())
+
+    def test_revoked_or_expired_sessions_cannot_receive_push(self):
+        active = PushDevice.objects.create(
+            user=self.client_user, session=self.session,
+            expo_token="ExponentPushToken[active-session]", platform=PushDevice.Platform.IOS,
+            device_id="active-phone", last_seen_at=timezone.now(),
+        )
+        _, _, expired_session = create_device_session(self.client_user, "Expired phone")
+        expired_session.expires_at = timezone.now() - timedelta(seconds=1)
+        expired_session.save(update_fields=("expires_at",))
+        expired = PushDevice.objects.create(
+            user=self.client_user, session=expired_session,
+            expo_token="ExponentPushToken[expired-session]", platform=PushDevice.Platform.IOS,
+            device_id="expired-phone", last_seen_at=timezone.now(),
+        )
+
+        notify_appointment_confirmed(self.appointment)
+        client_notification = Notification.objects.get(
+            recipient=self.client_user, kind=Notification.Kind.APPOINTMENT_CONFIRMED,
+        )
+        self.assertEqual(
+            list(client_notification.deliveries.values_list("device_id", flat=True)),
+            [active.pk],
+        )
+        self.assertEqual(deactivate_stale_push_devices(), 1)
+        expired.refresh_from_db()
+        self.assertFalse(expired.active)
+
+        revoke_session(self.session, "LOGOUT")
+        active.refresh_from_db()
+        self.assertFalse(active.active)
+
+    def test_logout_all_deactivates_every_registered_device(self):
+        first = PushDevice.objects.create(
+            user=self.client_user, session=self.session,
+            expo_token="ExponentPushToken[first-session]", platform=PushDevice.Platform.IOS,
+            device_id="first-phone", last_seen_at=timezone.now(),
+        )
+        _, _, other_session = create_device_session(self.client_user, "Other phone")
+        second = PushDevice.objects.create(
+            user=self.client_user, session=other_session,
+            expo_token="ExponentPushToken[second-session]", platform=PushDevice.Platform.ANDROID,
+            device_id="second-phone", last_seen_at=timezone.now(),
+        )
+
+        self.assertEqual(revoke_all_user_sessions(self.client_user, "LOGOUT_ALL"), 2)
+        self.assertFalse(PushDevice.objects.filter(pk__in=(first.pk, second.pk), active=True).exists())
 
     def test_notification_center_is_scoped_and_can_mark_all_read(self):
         notify_appointment_confirmed(self.appointment)
@@ -147,6 +198,7 @@ class MessageNotificationTests(APITestCase):
     def test_push_receipt_failure_is_audited_and_revokes_dead_device(self):
         device = PushDevice.objects.create(
             user=self.client_user,
+            session=self.session,
             expo_token="ExponentPushToken[receipt-test]",
             platform=PushDevice.Platform.IOS,
             device_id="receipt-phone",

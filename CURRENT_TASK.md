@@ -24,6 +24,8 @@
 - Physical-device image uploads use Expo SDK 58 `File`/`Blob` multipart bodies instead of the removed legacy React Native URI object; progress, consultation, and chat photos share the corrected upload path.
 - Staff/client workspace boundaries are enforced in navigation and APIs: TK sees client-care tools instead of Hair Profile/My Appointments, client consultation routes redirect to staff workspaces, and staff accounts cannot create a client hair profile or start a self-consultation.
 - A fail-closed staging deployment stack is ready for `hairdoctk-dev.livecoder.tech`: Docker Compose runs PostgreSQL, Redis, localhost-only Daphne/Channels, and Celery worker/beat behind the server's existing aaPanel Apache HTTPS proxy; server bootstrap and one-command Git/migration/restart deployment scripts are included.
+- Notifications use two independent layers: durable in-app records and user-scoped realtime inbox events are always created, while push/email preferences gate only external alerts. Expo devices are session-bound, fan out across valid signed-in devices, and deactivate on device logout, logout-all, password/session revocation, account deletion, session expiry, or Expo's invalid-token receipt.
+- Transactional email uses Elastic Email's HTTPS API v4 through a Django email backend, with API-key authentication, verified-sender enforcement by the provider, and stable idempotency keys for auth and notification deliveries; SMTP credentials are not required.
 
 ## Remaining activation and acceptance
 
@@ -32,6 +34,8 @@
 - Point `hairdoctk-dev.livecoder.tech` through Cloudflare to the staging server, create the ignored server `deploy/staging/.env`, run the first deployment, and verify HTTPS/WSS plus unchallenged signed POST delivery at `/api/v1/integrations/stripe/webhook/`.
 - Correct/recreate the Stripe Sandbox destination with a current payload version, subscribe to the seven approved checkout/refund events, and put its final `whsec_...` value in ignored `apps/backend/.env` as `STRIPE_WEBHOOK_SECRET`.
 - Apply migration `payments.0004_stripe_provider`.
+- Apply migration `notifications.0004_pushdevice_session`. External OS push remains intentionally disabled until an EAS project/development or store build has valid Apple/Android push credentials; then set `PUSH_NOTIFICATIONS_ENABLED=true`. Expo Go and web continue to receive the in-app realtime notification layer without OS push.
+- Put the Elastic Email `SendHttp` API key in ignored staging environment configuration as `ELASTIC_EMAIL_API_KEY`, set the verified `DEFAULT_FROM_EMAIL`, enable `EMAIL_NOTIFICATIONS_ENABLED`, redeploy, and confirm a verification email plus one worker-delivered care notification in Elastic Email Activity.
 - Complete one positive-price booking with a Stripe test card and verify payment, order, appointment, conversation, duplicate-event idempotency, failure/expiry, and refund records.
 - Keep live credentials inactive; no real charge or production switch without explicit approval.
 

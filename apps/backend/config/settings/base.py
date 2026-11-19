@@ -173,6 +173,11 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env("EMAIL_USE_TLS")
 EMAIL_TIMEOUT = 10
+ELASTIC_EMAIL_API_KEY = env("ELASTIC_EMAIL_API_KEY", default="")
+ELASTIC_EMAIL_API_BASE_URL = env(
+    "ELASTIC_EMAIL_API_BASE_URL",
+    default="https://api.elasticemail.com/v4",
+)
 PHOTO_CONSENT_REQUIRED = env("PHOTO_CONSENT_REQUIRED")
 
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
@@ -218,6 +223,10 @@ CELERY_BEAT_SCHEDULE = {
     "hairdoc-push-receipts": {
         "task": "apps.notifications.tasks.reconcile_push_receipts",
         "schedule": 900.0,
+    },
+    "hairdoc-stale-push-devices": {
+        "task": "apps.notifications.tasks.deactivate_stale_push_devices",
+        "schedule": 3600.0,
     },
 }
 

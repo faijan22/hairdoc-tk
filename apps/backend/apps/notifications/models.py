@@ -10,6 +10,13 @@ class PushDevice(BaseModel):
         ANDROID = "ANDROID", "Android"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices")
+    session = models.ForeignKey(
+        "accounts.DeviceSession",
+        on_delete=models.CASCADE,
+        related_name="push_devices",
+        blank=True,
+        null=True,
+    )
     expo_token = models.CharField(max_length=255, unique=True)
     platform = models.CharField(max_length=12, choices=Platform.choices)
     device_id = models.CharField(max_length=120)

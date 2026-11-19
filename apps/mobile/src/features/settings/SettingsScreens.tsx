@@ -838,17 +838,17 @@ const notificationRows: {
   {
     key: "appointment_reminders",
     label: "Appointment reminders",
-    description: "Reminders before a scheduled consultation.",
+    description: "Push or email reminders before a consultation.",
   },
   {
     key: "message_notifications",
     label: "New messages",
-    description: "Alerts when TK replies to your consultation.",
+    description: "Push or email alerts when a new message arrives.",
   },
   {
     key: "coaching_updates",
     label: "Care plan & progress",
-    description: "Updates when guidance or progress feedback is ready.",
+    description: "Push or email alerts when care updates are ready.",
   },
 ];
 export function NotificationsScreen() {
@@ -905,8 +905,9 @@ export function NotificationsScreen() {
   return (
     <SettingsPage title="Notifications">
       <Text color="muted">
-        Choose which care updates can alert you. Message previews stay private
-        and never include the message text.
+        Updates always remain available in your in-app Notifications. Choose
+        which updates may also contact you outside the app. Message previews
+        stay private and never include the message text.
       </Text>
       {preferences.isLoading ? <LoadingIndicator /> : null}
       {preferences.isError ? (

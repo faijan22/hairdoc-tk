@@ -12,6 +12,7 @@ from apps.accounts.services import create_device_session
 from apps.consultations.models import Appointment, ConsultationCase, ConsultationService
 from apps.messaging.models import Conversation, Message
 from apps.messaging.services import create_message, ensure_consultation_conversation
+from apps.notifications.models import PushDevice
 from apps.payments.models import Order, Payment
 from apps.private_media.models import StoredFile
 from apps.private_media.storage import get_storage_provider
@@ -28,12 +29,20 @@ class AccountDeletionTests(APITestCase):
             "tk-delete-test@example.com", self.password,
             is_email_verified=True, is_staff=True,
         )
-        access, _, _ = create_device_session(self.user, "Deletion test")
+        access, _, self.session = create_device_session(self.user, "Deletion test")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
 
     def test_deletion_requires_password_and_exact_confirmation_then_deidentifies(self):
         ClientHairProfile.objects.create(user=self.user, concerns="Private concern")
         NotificationPreference.objects.create(user=self.user, timezone="Europe/London")
+        PushDevice.objects.create(
+            user=self.user,
+            session=self.session,
+            expo_token="ExponentPushToken[account-deletion]",
+            platform=PushDevice.Platform.IOS,
+            device_id="deleted-phone",
+            last_seen_at=timezone.now(),
+        )
         service = ConsultationService.objects.create(
             name="Deletion audit consultation", slug=f"deletion-{uuid4()}",
             short_description="Test", description="Test", duration_minutes=30,
@@ -101,6 +110,7 @@ class AccountDeletionTests(APITestCase):
         self.assertEqual(Message.objects.count(), 0)
         self.assertEqual(Conversation.objects.count(), 0)
         self.assertEqual(DeviceSession.objects.filter(user=self.user).count(), 0)
+        self.assertEqual(PushDevice.objects.filter(user=self.user).count(), 0)
         self.assertTrue(Payment.objects.filter(order=order, user=self.user).exists())
         self.assertEqual(self.client.get(reverse("accounts:me")).status_code, 401)
 

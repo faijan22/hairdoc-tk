@@ -28,6 +28,10 @@ if VIDEO_PROVIDER_BACKEND.endswith(".DailyVideoProvider"):  # noqa: F405
         missing.append("DAILY_DOMAIN (HTTPS required)")
 if CHANNEL_LAYERS["default"]["BACKEND"] != "channels_redis.core.RedisChannelLayer":  # noqa: F405
     missing.append("USE_REDIS_CHANNEL_LAYER=true")
+if EMAIL_BACKEND.endswith("console.EmailBackend"):  # noqa: F405
+    missing.append("EMAIL_BACKEND (real provider required for account email)")
+if EMAIL_BACKEND.endswith("ElasticEmailBackend") and not ELASTIC_EMAIL_API_KEY:  # noqa: F405
+    missing.append("ELASTIC_EMAIL_API_KEY")
 if missing:
     raise ImproperlyConfigured(f"Missing production configuration: {', '.join(missing)}")
 

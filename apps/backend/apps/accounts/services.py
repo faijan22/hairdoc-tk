@@ -7,7 +7,7 @@ from urllib.parse import quote
 import jwt
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -107,17 +107,20 @@ def rotate_refresh_token(raw_token: str) -> tuple[str, str, DeviceSession]:
                     session.revoked_at = now
                     session.revoke_reason = "REFRESH_REUSE"
                     session.save(update_fields=("revoked_at", "revoke_reason"))
+                    session.push_devices.filter(active=True).update(active=False, updated_at=now)
                 invalid = True
             elif record.expires_at <= now or session.expires_at <= now or session.revoked_at is not None:
                 if session.revoked_at is None:
                     session.revoked_at = now
                     session.revoke_reason = "EXPIRED"
                     session.save(update_fields=("revoked_at", "revoke_reason"))
+                session.push_devices.filter(active=True).update(active=False, updated_at=now)
                 invalid = True
             elif not session.user.is_active:
                 session.revoked_at = now
                 session.revoke_reason = "USER_INACTIVE"
                 session.save(update_fields=("revoked_at", "revoke_reason"))
+                session.push_devices.filter(active=True).update(active=False, updated_at=now)
                 invalid = True
             else:
                 record.used_at = now
@@ -134,9 +137,11 @@ def rotate_refresh_token(raw_token: str) -> tuple[str, str, DeviceSession]:
 
 def revoke_session(session: DeviceSession, reason: str) -> None:
     if session.revoked_at is None:
-        session.revoked_at = timezone.now()
+        now = timezone.now()
+        session.revoked_at = now
         session.revoke_reason = reason[:40]
         session.save(update_fields=("revoked_at", "revoke_reason"))
+        session.push_devices.filter(active=True).update(active=False, updated_at=now)
 
 
 def revoke_session_by_refresh(raw_token: str, reason: str = "LOGOUT") -> None:
@@ -146,10 +151,13 @@ def revoke_session_by_refresh(raw_token: str, reason: str = "LOGOUT") -> None:
 
 
 def revoke_all_user_sessions(user: User, reason: str) -> int:
-    return user.device_sessions.filter(revoked_at__isnull=True).update(
-        revoked_at=timezone.now(),
+    now = timezone.now()
+    count = user.device_sessions.filter(revoked_at__isnull=True).update(
+        revoked_at=now,
         revoke_reason=reason[:40],
     )
+    user.push_devices.filter(active=True).update(active=False, updated_at=now)
+    return count
 
 
 @transaction.atomic
@@ -232,7 +240,7 @@ def issue_email_action(user: User, purpose: str) -> str:
     now = timezone.now()
     EmailActionToken.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(used_at=now)
     raw_token = _opaque_token()
-    EmailActionToken.objects.create(
+    action = EmailActionToken.objects.create(
         user=user,
         purpose=purpose,
         token_hash=_token_hash(raw_token),
@@ -248,12 +256,12 @@ def issue_email_action(user: User, purpose: str) -> str:
         path = "auth/reset-password"
         intro = "Use this secure link to reset your HairDoc TK password."
 
-    send_mail(
-        subject,
-        f"{intro}\n\n{_action_url(path, raw_token)}\n\nThis link expires soon and can be used once.",
-        None,
-        [user.email],
-    )
+    EmailMessage(
+        subject=subject,
+        body=f"{intro}\n\n{_action_url(path, raw_token)}\n\nThis link expires soon and can be used once.",
+        to=[user.email],
+        headers={"Idempotency-Key": f"email-action-{action.pk}"},
+    ).send(fail_silently=False)
     return raw_token
 
 

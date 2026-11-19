@@ -13,16 +13,28 @@ class PushDeviceListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(PushDeviceSerializer(request.user.push_devices.filter(active=True), many=True).data)
+        return Response(PushDeviceSerializer(request.user.push_devices.filter(
+            active=True,
+            session__revoked_at__isnull=True,
+            session__expires_at__gt=timezone.now(),
+        ), many=True).data)
 
     def post(self, request):
         serializer = PushDeviceInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
-        PushDevice.objects.filter(expo_token=values["expo_token"]).exclude(user=request.user).delete()
+        PushDevice.objects.filter(expo_token=values["expo_token"]).exclude(
+            user=request.user,
+            device_id=values["device_id"],
+        ).delete()
         device, _ = PushDevice.objects.update_or_create(
             user=request.user, device_id=values["device_id"],
-            defaults={**values, "active": True, "last_seen_at": timezone.now()},
+            defaults={
+                **values,
+                "session": request.auth,
+                "active": True,
+                "last_seen_at": timezone.now(),
+            },
         )
         return Response(PushDeviceSerializer(device).data, status=status.HTTP_201_CREATED)
 

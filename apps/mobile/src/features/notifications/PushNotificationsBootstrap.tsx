@@ -17,13 +17,19 @@ export function PushNotificationsBootstrap() {
 
   useEffect(() => {
     if (status !== "authenticated" || pushUnavailableReason()) return;
-    void Notifications.getPermissionsAsync()
-      .then((permission) => {
-        if (permission.status === "granted")
-          return enablePushOnThisDevice(false);
-        return undefined;
-      })
-      .catch(() => undefined);
+    const syncGrantedDevice = () =>
+      Notifications.getPermissionsAsync()
+        .then((permission) => {
+          if (permission.status === "granted")
+            return enablePushOnThisDevice(false);
+          return undefined;
+        })
+        .catch(() => undefined);
+    void syncGrantedDevice();
+    const tokenSubscription = Notifications.addPushTokenListener(() => {
+      void syncGrantedDevice();
+    });
+    return () => tokenSubscription.remove();
   }, [status]);
 
   useEffect(() => {
