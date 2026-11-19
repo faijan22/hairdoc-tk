@@ -38,14 +38,23 @@ class MessagingError(Exception):
 
 @transaction.atomic
 def ensure_consultation_conversation(appointment):
-    conversation, _ = Conversation.objects.get_or_create(consultation=appointment.case)
-    ConversationMember.objects.get_or_create(
+    conversation, conversation_created = Conversation.objects.get_or_create(consultation=appointment.case)
+    _, client_created = ConversationMember.objects.get_or_create(
         conversation=conversation, user=appointment.client, defaults={"role": ConversationMember.Role.CLIENT},
     )
-    ConversationMember.objects.get_or_create(
+    _, expert_created = ConversationMember.objects.get_or_create(
         conversation=conversation, user=appointment.expert, defaults={"role": ConversationMember.Role.EXPERT},
     )
+    if conversation_created or client_created or expert_created:
+        transaction.on_commit(lambda: _broadcast_conversation_ready(conversation.pk))
     return conversation
+
+
+def _broadcast_conversation_ready(conversation_id):
+    try:
+        _broadcast_inbox_snapshot(Conversation.objects.get(pk=conversation_id))
+    except Exception:
+        logger.warning("Realtime conversation-ready broadcast failed for conversation %s.", conversation_id)
 
 
 @transaction.atomic

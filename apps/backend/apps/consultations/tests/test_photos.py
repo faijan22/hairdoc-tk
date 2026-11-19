@@ -13,6 +13,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import LegalDocument, User, UserConsent
 from apps.accounts.services import create_device_session
 from apps.consultations.models import (
+    ConsultationAnswer,
     ConsultationCase,
     ConsultationPhoto,
     ConsultationPhotoAccess,
@@ -20,6 +21,7 @@ from apps.consultations.models import (
     ConsultationService,
     Questionnaire,
     QuestionnaireQuestion,
+    QuestionOption,
 )
 
 
@@ -46,9 +48,12 @@ class ConsultationPhotoApiTests(APITestCase):
         questionnaire = Questionnaire.objects.create(
             service=self.service, version=1, title="Intake", status=Questionnaire.Status.PUBLISHED, published_at=now,
         )
-        QuestionnaireQuestion.objects.create(
+        self.goal_question = QuestionnaireQuestion.objects.create(
             questionnaire=questionnaire, key="goal", section="Goals", prompt="What is your goal?",
-            type=QuestionnaireQuestion.Type.LONG_TEXT,
+            type=QuestionnaireQuestion.Type.SINGLE_CHOICE,
+        )
+        QuestionOption.objects.create(
+            question=self.goal_question, value="hair_health", label="Improve overall hair health",
         )
         self.case = ConsultationCase.objects.create(
             client=self.user, service=self.service, status=ConsultationCase.Status.INTAKE_COMPLETE,
@@ -56,7 +61,10 @@ class ConsultationPhotoApiTests(APITestCase):
             service_name=self.service.name, duration_minutes=45, price_amount="80", currency="GBP",
             intake_completed_at=now,
         )
-        ConsultationResponse.objects.create(case=self.case, questionnaire=questionnaire)
+        self.response = ConsultationResponse.objects.create(case=self.case, questionnaire=questionnaire)
+        ConsultationAnswer.objects.create(
+            response=self.response, question=self.goal_question, value="hair_health",
+        )
         self.document = LegalDocument.objects.create(
             type=LegalDocument.Type.PHOTO_DATA_CONSENT, version=1, title="Private photo consent",
             body="Owner-approved test policy.", status=LegalDocument.Status.PUBLISHED, published_at=now,
@@ -171,6 +179,8 @@ class ConsultationPhotoApiTests(APITestCase):
         detail = self.client.get(reverse("consultations:staff-case-detail", kwargs={"public_id": self.case.public_id}))
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["client"]["email"], self.user.email)
+        self.assertEqual(detail.json()["answers"][0]["value"], "hair_health")
+        self.assertEqual(detail.json()["answers"][0]["display_value"], "Improve overall hair health")
         staff_content_path = detail.json()["photos"][0]["content_path"]
         staff_content = self.client.get(staff_content_path)
         self.assertEqual(staff_content.status_code, 200)

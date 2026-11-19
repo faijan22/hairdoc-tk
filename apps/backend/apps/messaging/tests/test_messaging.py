@@ -1,6 +1,7 @@
 from datetime import timedelta
 from io import BytesIO
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from uuid import uuid4
 
 from asgiref.sync import async_to_sync
@@ -36,12 +37,12 @@ class MessagingFixture:
             timezone_snapshot="Europe/London", service_name=service.name, duration_minutes=30,
             price_amount="60", currency="GBP", intake_completed_at=timezone.now(), photos_completed_at=timezone.now(),
         )
-        appointment = Appointment.objects.create(
+        self.appointment = Appointment.objects.create(
             case=case, client=self.user, expert=self.tk, starts_at=timezone.now() + timedelta(days=2),
             ends_at=timezone.now() + timedelta(days=2, minutes=30), status=Appointment.Status.CONFIRMED,
             client_timezone="Europe/London", expert_timezone="Europe/London",
         )
-        self.conversation = ensure_consultation_conversation(appointment)
+        self.conversation = ensure_consultation_conversation(self.appointment)
 
 
 class MessagingApiTests(MessagingFixture, APITestCase):
@@ -71,6 +72,14 @@ class MessagingApiTests(MessagingFixture, APITestCase):
         self.authorize(self.other)
         self.assertEqual(self.client.get(url).status_code, 404)
         self.assertEqual(self.client.get(reverse("messaging:conversation-list")).json(), [])
+
+    def test_new_empty_conversation_is_broadcast_to_both_cached_inboxes(self):
+        self.conversation.delete()
+        with patch("apps.messaging.services._broadcast_conversation_ready") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                conversation = ensure_consultation_conversation(self.appointment)
+        broadcast.assert_called_once_with(conversation.pk)
+        self.assertEqual(conversation.members.count(), 2)
 
     def test_history_is_cursor_paginated_and_ticket_is_hashed(self):
         for index in range(35):

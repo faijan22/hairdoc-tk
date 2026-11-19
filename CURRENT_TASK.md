@@ -27,6 +27,7 @@
 - Notifications use two independent layers: durable in-app records and user-scoped realtime inbox events are always created, while push/email preferences gate only external alerts. Expo devices are session-bound, fan out across valid signed-in devices, and deactivate on device logout, logout-all, password/session revocation, account deletion, session expiry, or Expo's invalid-token receipt.
 - Transactional email uses Elastic Email's HTTPS API v4 through a Django email backend, with API-key authentication, verified-sender enforcement by the provider, and stable idempotency keys for auth and notification deliveries; SMTP credentials are not required.
 - Client payment refresh actively retrieves the existing user-scoped Checkout Session from Stripe and validates its order, amount and currency before confirming it, providing a bounded recovery path when a webhook is delayed or missed; it is rate-limited and removes continuous mobile polling.
+- Care-plan acceptance is complete end to end: staff intake review renders questionnaire option labels instead of storage keys, publication shows an explicit locked/sent state, durable unread in-app notifications deep-link to the published plan, embedded HTTPS guidance links are tappable, and a newly confirmed empty client/TK conversation is broadcast into both cached inboxes before either person sends a message.
 
 ## Remaining activation and acceptance
 

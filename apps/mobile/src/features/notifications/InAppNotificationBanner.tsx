@@ -48,6 +48,9 @@ export function InAppNotificationBanner() {
     if (!notifications.data) return;
     if (latestSeen.current === undefined) {
       latestSeen.current = newest?.public_id ?? null;
+      if (newest && !newest.read_at && newest.route !== pathname) {
+        setBannerId(newest.public_id);
+      }
       return;
     }
     if (newest && newest.public_id !== latestSeen.current) {

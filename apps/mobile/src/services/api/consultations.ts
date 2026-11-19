@@ -121,7 +121,12 @@ const staffCaseDetailSchema = z.object({
   photos_completed_at: z.string(),
   updated_at: z.string(),
   answers: z.array(
-    z.object({ question: z.string(), section: z.string(), value: z.unknown() }),
+    z.object({
+      question: z.string(),
+      section: z.string(),
+      value: z.unknown(),
+      display_value: z.unknown(),
+    }),
   ),
   photo_consent_active: z.boolean(),
   photos: z.array(photoSchema),

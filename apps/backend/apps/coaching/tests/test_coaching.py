@@ -5,6 +5,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import User
 from apps.accounts.services import create_device_session
 from apps.consultations.models import ConsultationCase, ConsultationService
+from apps.notifications.models import Notification
 
 from ..models import CoachingPlan
 
@@ -39,6 +40,12 @@ class CoachingPlanApiTests(APITestCase):
         published = self.client.post(reverse("coaching:staff-plan-publish", kwargs={"public_id": plan_id}), {}, format="json")
         self.assertEqual(published.status_code, 200)
         self.assertEqual(published.json()["status"], "PUBLISHED")
+        notification = Notification.objects.get(
+            recipient=self.client_user,
+            kind=Notification.Kind.COACHING_PLAN_PUBLISHED,
+        )
+        self.assertEqual(notification.title, "Your care plan is ready")
+        self.assertEqual(notification.route, f"/plans/{plan_id}")
         self.assertEqual(self.client.patch(detail_url, payload, format="json").status_code, 400)
 
         self.authorize(self.client_user)

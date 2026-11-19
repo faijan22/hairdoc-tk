@@ -8,7 +8,12 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ConsultationCase, ConsultationPhoto, ConsultationPhotoAccess
+from .models import (
+    ConsultationCase,
+    ConsultationPhoto,
+    ConsultationPhotoAccess,
+    QuestionnaireQuestion,
+)
 from .photo_services import (
     MAX_PHOTOS_PER_CASE,
     PhotoError,
@@ -213,7 +218,9 @@ class PrivatePhotoContentView(APIView):
 
 
 def _staff_case_payload(case, viewer):
-    answers = case.response.answers.select_related("question").order_by("question__display_order", "id")
+    answers = case.response.answers.select_related("question").prefetch_related(
+        "question__options",
+    ).order_by("question__display_order", "id")
     consent_active = photo_access_allowed(case.client)
     return {
         "public_id": case.public_id,
@@ -232,7 +239,12 @@ def _staff_case_payload(case, viewer):
         "photos_completed_at": case.photos_completed_at,
         "updated_at": case.updated_at,
         "answers": [
-            {"question": answer.question.prompt, "section": answer.question.section, "value": answer.value}
+            {
+                "question": answer.question.prompt,
+                "section": answer.question.section,
+                "value": answer.value,
+                "display_value": _answer_display_value(answer),
+            }
             for answer in answers
         ],
         "photo_consent_active": consent_active,
@@ -242,6 +254,22 @@ def _staff_case_payload(case, viewer):
             context={"viewer": viewer} if consent_active else {},
         ).data,
     }
+
+
+def _answer_display_value(answer):
+    value = answer.value
+    if answer.question.type == QuestionnaireQuestion.Type.BOOLEAN and isinstance(value, bool):
+        return "Yes" if value else "No"
+    options = {option.value: option.label for option in answer.question.options.all()}
+    if answer.question.type == QuestionnaireQuestion.Type.SINGLE_CHOICE and isinstance(value, str):
+        return options.get(value, value.replace("_", " ").replace("-", " ").title())
+    if answer.question.type == QuestionnaireQuestion.Type.MULTI_CHOICE and isinstance(value, list):
+        return [
+            options.get(item, item.replace("_", " ").replace("-", " ").title())
+            if isinstance(item, str) else item
+            for item in value
+        ]
+    return value
 
 
 class StaffConsultationListView(APIView):

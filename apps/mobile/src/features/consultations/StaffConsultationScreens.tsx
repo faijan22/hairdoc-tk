@@ -303,7 +303,9 @@ export function StaffConsultationDetailScreen() {
                   <Text variant="caption" color="muted">
                     {answer.question}
                   </Text>
-                  <Text variant="bodyStrong">{displayValue(answer.value)}</Text>
+                  <Text variant="bodyStrong">
+                    {displayValue(answer.display_value)}
+                  </Text>
                 </Card>
               ))}
             </View>

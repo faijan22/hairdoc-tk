@@ -91,6 +91,35 @@ function dateLabel(value: string | null) {
     : "Draft";
 }
 
+function LinkifiedText({ value }: { value: string }) {
+  const theme = useTheme();
+  return (
+    <Text>
+      {value.split(/(https?:\/\/[^\s]+)/gi).map((part, index) => {
+        if (!/^https?:\/\//i.test(part)) return part;
+        const match = part.match(/^(.*?)([.,!?;:]*)$/);
+        const url = match?.[1] || part;
+        const suffix = match?.[2] || "";
+        return (
+          <Text key={`${url}-${index}`}>
+            <Text
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(url)}
+              style={{
+                color: theme.colors.primary,
+                textDecorationLine: "underline",
+              }}
+            >
+              {url}
+            </Text>
+            {suffix}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
 export function ClientPlanListScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -200,7 +229,7 @@ export function ClientPlanDetailScreen() {
               {plan.data.sections.map((section) => (
                 <Card key={section.public_id} style={{ gap: theme.spacing.sm }}>
                   <Text variant="heading">{section.title}</Text>
-                  <Text>{section.body}</Text>
+                  <LinkifiedText value={section.body} />
                 </Card>
               ))}
             </View>
@@ -213,7 +242,7 @@ export function ClientPlanDetailScreen() {
                       {item.category_label}
                     </Text>
                     <Text variant="heading">{item.title}</Text>
-                    <Text>{item.guidance}</Text>
+                    <LinkifiedText value={item.guidance} />
                     {item.external_url ? (
                       <Button
                         variant="secondary"
@@ -284,6 +313,7 @@ export function StaffPlanEditorScreen() {
     [],
   );
   const [saved, setSaved] = useState(false);
+  const [publishedNow, setPublishedNow] = useState(false);
   useEffect(() => {
     if (!plan.data || loadedId === plan.data.public_id) return;
     // Query data intentionally seeds this editable draft exactly once per plan.
@@ -352,6 +382,7 @@ export function StaffPlanEditorScreen() {
     },
     onSuccess: async (data) => {
       queryClient.setQueryData(["staff", "coaching", "plan", planId], data);
+      setPublishedNow(true);
       await queryClient.invalidateQueries({
         queryKey: ["staff", "coaching", "case", data.case_public_id],
       });
@@ -387,6 +418,37 @@ export function StaffPlanEditorScreen() {
                 </Text>
               ) : null}
             </Card>
+            {!editable ? (
+              <Card
+                style={{
+                  gap: theme.spacing.sm,
+                  borderColor: theme.colors.primary,
+                  backgroundColor: theme.colors.primaryMuted,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: theme.spacing.sm,
+                  }}
+                >
+                  <Feather
+                    name="check-circle"
+                    size={theme.iconSize.md}
+                    color={theme.colors.primary}
+                  />
+                  <Text variant="heading" color="primary">
+                    {publishedNow ? "Published successfully" : "Published to client"}
+                  </Text>
+                </View>
+                <Text>
+                  {plan.data.client_name} can now open this plan. An in-app
+                  notification links directly to it, and the published version
+                  is locked against accidental edits.
+                </Text>
+              </Card>
+            ) : null}
             <TextField
               label="Plan title"
               value={title}
@@ -415,40 +477,47 @@ export function StaffPlanEditorScreen() {
                   <Text variant="overline" color="accent">
                     SECTION {index + 1}
                   </Text>
-                  <TextField
-                    label="Heading"
-                    value={section.title}
-                    editable={editable}
-                    maxLength={160}
-                    onChangeText={(value) => {
-                      setSaved(false);
-                      setSections((items) =>
-                        items.map((item) =>
-                          item.key === section.key
-                            ? { ...item, title: value }
-                            : item,
-                        ),
-                      );
-                    }}
-                  />
-                  <TextField
-                    label="Guidance"
-                    value={section.body}
-                    editable={editable}
-                    multiline
-                    maxLength={4000}
-                    style={{ minHeight: 130, textAlignVertical: "top" }}
-                    onChangeText={(value) => {
-                      setSaved(false);
-                      setSections((items) =>
-                        items.map((item) =>
-                          item.key === section.key
-                            ? { ...item, body: value }
-                            : item,
-                        ),
-                      );
-                    }}
-                  />
+                  {editable ? (
+                    <>
+                      <TextField
+                        label="Heading"
+                        value={section.title}
+                        maxLength={160}
+                        onChangeText={(value) => {
+                          setSaved(false);
+                          setSections((items) =>
+                            items.map((item) =>
+                              item.key === section.key
+                                ? { ...item, title: value }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                      <TextField
+                        label="Guidance"
+                        value={section.body}
+                        multiline
+                        maxLength={4000}
+                        style={{ minHeight: 130, textAlignVertical: "top" }}
+                        onChangeText={(value) => {
+                          setSaved(false);
+                          setSections((items) =>
+                            items.map((item) =>
+                              item.key === section.key
+                                ? { ...item, body: value }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <View style={{ gap: theme.spacing.sm }}>
+                      <Text variant="heading">{section.title}</Text>
+                      <LinkifiedText value={section.body} />
+                    </View>
+                  )}
                   {editable && sections.length > 1 ? (
                     <Button
                       variant="ghost"
@@ -477,8 +546,9 @@ export function StaffPlanEditorScreen() {
                 </Button>
               ) : null}
             </View>
-            <Divider />
-            <View style={{ gap: theme.spacing.md }}>
+            {editable || recommendations.length ? <Divider /> : null}
+            {editable || recommendations.length ? (
+              <View style={{ gap: theme.spacing.md }}>
               <Text variant="heading">Recommendations</Text>
               {recommendations.map((item, index) => (
                 <Card key={item.key} style={{ gap: theme.spacing.md }}>
@@ -615,7 +685,8 @@ export function StaffPlanEditorScreen() {
                   Add recommendation
                 </Button>
               ) : null}
-            </View>
+              </View>
+            ) : null}
             {editable ? (
               <View style={{ gap: theme.spacing.sm }}>
                 {validation ? <Text color="danger">{validation}</Text> : null}
