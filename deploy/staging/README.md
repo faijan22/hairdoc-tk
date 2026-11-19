@@ -89,6 +89,21 @@ Expected health URL:
 https://hairdoctk-dev.livecoder.tech/api/v1/health/
 ```
 
+Verify that Apache is actually upgrading the public WebSocket path:
+
+```bash
+curl -i --http1.1 --max-time 10 \
+  -H 'Connection: Upgrade' \
+  -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' \
+  -H 'Sec-WebSocket-Key: SGFpcmRvY1RLVGVzdEtleQ==' \
+  'https://hairdoctk-dev.livecoder.tech/ws/v1/inbox/?ticket=invalid'
+```
+
+An invalid one-use ticket should be rejected by Daphne (HTTP 403), proving the
+upgrade reached Channels. HTTP 404 means the `/ws/` `ProxyPass` lines are not
+inside the active HTTPS virtual host or appear after its catch-all `/` proxy.
+
 Create TK's first server account after deployment:
 
 ```bash

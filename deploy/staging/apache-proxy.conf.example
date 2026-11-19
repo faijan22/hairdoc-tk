@@ -6,7 +6,9 @@ ProxyPreserveHost On
 ProxyAddHeaders On
 RequestHeader set X-Forwarded-Proto "https"
 
-# Keep WebSocket routing before the catch-all HTTP proxy.
+# Keep WebSocket routing inside the active :443 VirtualHost and before the
+# catch-all HTTP proxy. A public Upgrade request must reach Daphne (an invalid
+# ticket returns 403); a Django 404 means this rule is not active.
 ProxyPass        "/ws/" "ws://127.0.0.1:18010/ws/" retry=0 timeout=300
 ProxyPassReverse "/ws/" "ws://127.0.0.1:18010/ws/"
 
