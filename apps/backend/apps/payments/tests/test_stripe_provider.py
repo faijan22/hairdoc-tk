@@ -94,6 +94,23 @@ class StripeProviderTests(SimpleTestCase):
             with self.assertRaises(PaymentProviderConfigurationError):
                 StripePaymentProvider()._ensure_checkout_configured()
 
+    @patch("apps.payments.providers.stripe.urlopen")
+    def test_checkout_status_can_be_retrieved_from_stripe(self, open_url):
+        response = Mock()
+        response.read.return_value = json.dumps({
+            "id": "cs_test_hairdoc",
+            "status": "complete",
+            "payment_status": "paid",
+        }).encode()
+        open_url.return_value.__enter__.return_value = response
+
+        session = StripePaymentProvider().retrieve_checkout("cs_test_hairdoc")
+
+        request = open_url.call_args.args[0]
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.full_url, "https://api.stripe.com/v1/checkout/sessions/cs_test_hairdoc")
+        self.assertEqual(session["payment_status"], "paid")
+
     def test_minor_units_are_exact(self):
         self.assertEqual(_minor_units(Decimal("80.00"), "GBP"), 8000)
         self.assertEqual(_minor_units(Decimal("800"), "JPY"), 800)

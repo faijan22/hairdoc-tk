@@ -127,6 +127,7 @@ REST_FRAMEWORK = {
         "realtime_ticket": "30/minute",
         "account_delete": "5/hour",
         "video_join": "10/minute",
+        "payment_refresh": "10/minute",
     },
 }
 

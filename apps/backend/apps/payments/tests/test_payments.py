@@ -1,6 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.urls import reverse
 from django.utils import timezone
@@ -166,6 +166,29 @@ class PaymentApiTests(APITestCase):
         self.assertEqual(self.client.get(reverse("payments:staff-payment-list")).json(), [])
         self.assertEqual(
             self.client.get(reverse("payments:staff-payment-detail", kwargs={"public_id": payment_id})).status_code,
+            404,
+        )
+
+    def test_client_refresh_recovers_a_paid_checkout_when_webhook_was_missed(self):
+        order = Order.objects.get(public_id=self.create_order().json()["public_id"])
+        payment_id = self.checkout(order).json()["payment"]["public_id"]
+        provider = FakeStripeProvider()
+        provider.retrieve_checkout = Mock(return_value=self.stripe_event()["data"]["object"])
+
+        with patch("apps.payments.services.get_payment_provider", return_value=provider):
+            response = self.client.post(
+                reverse("payments:payment-refresh", kwargs={"public_id": payment_id}),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], Payment.Status.SUCCEEDED)
+        self.appointment.refresh_from_db()
+        self.assertEqual(self.appointment.status, Appointment.Status.CONFIRMED)
+        self.assertEqual(WebhookEvent.objects.count(), 0)
+
+        self.authorize(self.other)
+        self.assertEqual(
+            self.client.post(reverse("payments:payment-refresh", kwargs={"public_id": payment_id})).status_code,
             404,
         )
 

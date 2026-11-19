@@ -4,7 +4,7 @@ import json
 import time
 from datetime import timedelta
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -53,6 +53,33 @@ class StripePaymentProvider:
                 return json.loads(response.read() or b"{}")
         except HTTPError as exc:
             detail = "Stripe rejected the checkout request."
+            try:
+                message = (json.loads(exc.read()).get("error") or {}).get("message")
+                if message:
+                    detail = str(message)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            raise PaymentProviderConfigurationError(detail) from exc
+        except (URLError, TimeoutError) as exc:
+            raise ConnectionError("Stripe checkout could not be reached.") from exc
+
+    def retrieve_checkout(self, session_id):
+        self._ensure_checkout_configured()
+        if not session_id.startswith("cs_"):
+            raise PaymentProviderConfigurationError("Stripe checkout identity is invalid.")
+        headers = {"Authorization": f"Bearer {self.secret_key}"}
+        if settings.STRIPE_API_VERSION.strip():
+            headers["Stripe-Version"] = settings.STRIPE_API_VERSION.strip()
+        request = Request(
+            f"{self.base_url}/v1/checkout/sessions/{quote(session_id, safe='')}",
+            method="GET",
+            headers=headers,
+        )
+        try:
+            with urlopen(request, timeout=12) as response:  # noqa: S310 - configured HTTPS Stripe host
+                return json.loads(response.read() or b"{}")
+        except HTTPError as exc:
+            detail = "Stripe could not verify this checkout session."
             try:
                 message = (json.loads(exc.read()).get("error") or {}).get("message")
                 if message:

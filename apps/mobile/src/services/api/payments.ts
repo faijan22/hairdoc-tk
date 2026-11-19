@@ -27,6 +27,11 @@ export async function getPayments() {
 export async function getPayment(paymentId: string) {
   return paymentSchema.parse(await apiGet<unknown>(`/payments/${paymentId}/`));
 }
+export async function refreshPayment(paymentId: string) {
+  return paymentSchema.parse(
+    await apiPost<unknown>(`/payments/${paymentId}/refresh/`, {}),
+  );
+}
 export async function getStaffPayments() {
   return staffPaymentSchema.array().parse(await apiGet<unknown>("/staff/payments/"));
 }

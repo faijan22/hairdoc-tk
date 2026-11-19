@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.consultations.models import Appointment
@@ -16,7 +17,13 @@ from .serializers import (
     PaymentSerializer,
     StaffPaymentSerializer,
 )
-from .services import PaymentError, create_checkout, create_order, parse_and_process_webhook
+from .services import (
+    PaymentError,
+    create_checkout,
+    create_order,
+    parse_and_process_webhook,
+    refresh_payment_status,
+)
 
 
 class PaymentUnavailable(APIException):
@@ -81,6 +88,24 @@ class PaymentDetailView(APIView):
             Payment.objects.select_related("order__appointment__case").prefetch_related("refunds"),
             public_id=public_id, user=request.user,
         )
+        return Response(PaymentSerializer(payment).data)
+
+
+class PaymentRefreshView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "payment_refresh"
+
+    def post(self, request, public_id):
+        payment = get_object_or_404(
+            Payment.objects.select_related("order__appointment__case").prefetch_related("refunds"),
+            public_id=public_id,
+            user=request.user,
+        )
+        try:
+            payment = refresh_payment_status(request.user, payment)
+        except PaymentError as exc:
+            _raise_payment(exc)
         return Response(PaymentSerializer(payment).data)
 
 

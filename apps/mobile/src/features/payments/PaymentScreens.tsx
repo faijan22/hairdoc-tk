@@ -22,6 +22,7 @@ import {
   getStaffPayment,
   getStaffPayments,
   Payment,
+  refreshPayment,
   StaffPayment,
 } from "@/services/api/payments";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -112,9 +113,11 @@ function statusTone(
 function StatusCard({
   payment,
   onCheck,
+  checking = false,
 }: {
   payment: Payment;
   onCheck?: () => void;
+  checking?: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -179,7 +182,7 @@ function StatusCard({
         </Text>
       </View>
       {onCheck && pending ? (
-        <Button variant="secondary" onPress={onCheck}>
+        <Button variant="secondary" loading={checking} onPress={onCheck}>
           Check payment status
         </Button>
       ) : null}
@@ -210,8 +213,15 @@ export function CheckoutScreen() {
     queryKey: ["payments", paymentId],
     queryFn: () => getPayment(paymentId!),
     enabled: Boolean(paymentId),
-    refetchInterval: browserOpened ? 3000 : false,
   });
+  const refresh = useMutation({
+    mutationFn: () => refreshPayment(paymentId!),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["payments", paymentId], updated);
+      void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
+  });
+  const refreshStatus = refresh.mutate;
   const checkout = useMutation({
     mutationFn: async () => {
       const activeOrder = order.data || (await order.mutateAsync());
@@ -237,14 +247,11 @@ export function CheckoutScreen() {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active" && paymentId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["payments", paymentId],
-        });
-        void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+        refreshStatus();
       }
     });
     return () => subscription.remove();
-  }, [paymentId, queryClient]);
+  }, [paymentId, refreshStatus]);
   useEffect(() => {
     if (
       payment.data &&
@@ -310,10 +317,12 @@ export function CheckoutScreen() {
         {payment.data ? (
           <StatusCard
             payment={payment.data}
-            onCheck={() => {
-              void payment.refetch().catch(() => undefined);
-            }}
+            checking={refresh.isPending}
+            onCheck={() => refreshStatus()}
           />
+        ) : null}
+        {refresh.isError ? (
+          <Text color="danger">{getApiErrorMessage(refresh.error)}</Text>
         ) : null}
         {payment.isError ? (
           <Card style={{ gap: theme.spacing.sm }}>
@@ -469,12 +478,21 @@ export function PaymentHistoryScreen() {
 export function PaymentDetailScreen() {
   const { paymentId } = useLocalSearchParams<{ paymentId: string }>();
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const isStaff = useAuthStore((state) => Boolean(state.user?.is_staff));
+  const detailKey = ["payments", isStaff ? "staff" : "client", paymentId];
   const item = useQuery({
-    queryKey: ["payments", isStaff ? "staff" : "client", paymentId],
+    queryKey: detailKey,
     queryFn: () =>
       isStaff ? getStaffPayment(paymentId) : getPayment(paymentId),
     enabled: Boolean(paymentId),
+  });
+  const refresh = useMutation({
+    mutationFn: () => refreshPayment(paymentId!),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(detailKey, updated);
+      void queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    },
   });
   if (!paymentId) return <Redirect href={"/payments" as Href} />;
   return (
@@ -499,10 +517,12 @@ export function PaymentDetailScreen() {
           <>
             <StatusCard
               payment={item.data}
-              onCheck={() => {
-                void item.refetch().catch(() => undefined);
-              }}
+              checking={refresh.isPending}
+              onCheck={isStaff ? undefined : () => refresh.mutate()}
             />
+            {refresh.isError ? (
+              <Text color="danger">{getApiErrorMessage(refresh.error)}</Text>
+            ) : null}
             <Card style={{ gap: theme.spacing.md }}>
               <Text variant="overline" color="accent">
                 RECEIPT

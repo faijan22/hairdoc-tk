@@ -1,6 +1,6 @@
 # Current Task - 13L Stripe Test-Mode Activation
 
-**Status:** `IN PROGRESS` — Stripe implementation and test API credential are ready; the stable staging DNS/server route, final signing secret and end-to-end payment acceptance remain.
+**Status:** `IN PROGRESS` — Stripe Checkout and stable staging routing are active; correct webhook delivery and end-to-end payment acceptance remain.
 **Started:** 2026-10-05
 **Next planned, not started:** Task 14 hardening.
 
@@ -26,13 +26,13 @@
 - A fail-closed staging deployment stack is ready for `hairdoctk-dev.livecoder.tech`: Docker Compose runs PostgreSQL, Redis, localhost-only Daphne/Channels, and Celery worker/beat behind the server's existing aaPanel Apache HTTPS proxy; server bootstrap and one-command Git/migration/restart deployment scripts are included.
 - Notifications use two independent layers: durable in-app records and user-scoped realtime inbox events are always created, while push/email preferences gate only external alerts. Expo devices are session-bound, fan out across valid signed-in devices, and deactivate on device logout, logout-all, password/session revocation, account deletion, session expiry, or Expo's invalid-token receipt.
 - Transactional email uses Elastic Email's HTTPS API v4 through a Django email backend, with API-key authentication, verified-sender enforcement by the provider, and stable idempotency keys for auth and notification deliveries; SMTP credentials are not required.
+- Client payment refresh actively retrieves the existing user-scoped Checkout Session from Stripe and validates its order, amount and currency before confirming it, providing a bounded recovery path when a webhook is delayed or missed; it is rate-limited and removes continuous mobile polling.
 
 ## Remaining activation and acceptance
 
 - Revoke the previously exposed Square tokens and remove legacy `SQUARE_*` lines from the ignored local `.env`; the application no longer reads them.
 - Stripe test-mode secret key is configured in ignored `apps/backend/.env`; rotate it after development because it was shared through chat.
-- Point `hairdoctk-dev.livecoder.tech` through Cloudflare to the staging server, create the ignored server `deploy/staging/.env`, run the first deployment, and verify HTTPS/WSS plus unchallenged signed POST delivery at `/api/v1/integrations/stripe/webhook/`.
-- Correct/recreate the Stripe Sandbox destination with a current payload version, subscribe to the seven approved checkout/refund events, and put its final `whsec_...` value in ignored `apps/backend/.env` as `STRIPE_WEBHOOK_SECRET`.
+- Correct the Stripe Sandbox destination from the obsolete, non-resolving `api-dev.hairdoctk.livecoder.tech` hostname to `https://hairdoctk-dev.livecoder.tech/api/v1/integrations/stripe/webhook/`, use a current payload version, subscribe to the seven approved checkout/refund events, and verify successful signed delivery in Stripe Event deliveries.
 - Apply migration `payments.0004_stripe_provider`.
 - Apply migration `notifications.0004_pushdevice_session`. External OS push remains intentionally disabled until an EAS project/development or store build has valid Apple/Android push credentials; then set `PUSH_NOTIFICATIONS_ENABLED=true`. Expo Go and web continue to receive the in-app realtime notification layer without OS push.
 - Put the Elastic Email `SendHttp` API key in ignored staging environment configuration as `ELASTIC_EMAIL_API_KEY`, set the verified `DEFAULT_FROM_EMAIL`, enable `EMAIL_NOTIFICATIONS_ENABLED`, redeploy, and confirm a verification email plus one worker-delivered care notification in Elastic Email Activity.

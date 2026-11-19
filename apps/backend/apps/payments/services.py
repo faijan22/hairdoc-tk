@@ -183,6 +183,43 @@ def parse_and_process_webhook(payload: bytes, signature: str):
         raise
 
 
+def refresh_payment_status(user, payment):
+    if payment.user_id != user.id:
+        raise PaymentError({"payment": ["This payment is not available."]})
+    if payment.provider != "STRIPE" or not payment.provider_checkout_session_id:
+        return payment
+    if payment.status not in {Payment.Status.CREATED, Payment.Status.PROCESSING}:
+        return payment
+    provider = get_payment_provider()
+    if provider.code != payment.provider:
+        raise PaymentError({"payment": ["The configured payment provider does not match this payment."]})
+    try:
+        stripe_session = provider.retrieve_checkout(payment.provider_checkout_session_id)
+    except PaymentProviderConfigurationError as exc:
+        raise PaymentError({"payment": [str(exc)]}, unavailable=True) from None
+    except Exception:
+        raise PaymentError(
+            {"payment": ["Stripe could not be reached. Please try again shortly."]},
+            unavailable=True,
+        ) from None
+
+    session_status = str(stripe_session.get("status") or "")
+    payment_status = str(stripe_session.get("payment_status") or "")
+    event_type = None
+    if payment_status == "paid":
+        event_type = "checkout.session.completed"
+    elif session_status == "expired":
+        event_type = "checkout.session.expired"
+    elif session_status == "complete" and payment_status == "unpaid":
+        event_type = "checkout.session.completed"
+    if event_type:
+        with transaction.atomic():
+            _process_stripe_checkout(event_type, stripe_session)
+    return Payment.objects.select_related("order__appointment__case").prefetch_related("refunds").get(
+        pk=payment.pk,
+    )
+
+
 def _process_provider_event(provider_code, event_type, provider_object):
     if provider_code == "STRIPE" and event_type in {
         "checkout.session.completed",
