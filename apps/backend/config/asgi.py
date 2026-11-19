@@ -17,7 +17,7 @@ class NativeOrAllowedOriginValidator:
 
     def __init__(self, app):
         self.app = app
-        allowed = ["*"] if settings.CORS_ALLOW_ALL_ORIGINS else list({
+        allowed = ["*"] if getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False) else list({
             *settings.CORS_ALLOWED_ORIGINS,
             *settings.CSRF_TRUSTED_ORIGINS,
         })
