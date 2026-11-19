@@ -46,8 +46,40 @@ export function NotificationsScreen() {
         {notifications.data?.results.map((notification) => <Pressable key={notification.public_id} accessibilityRole="button" accessibilityLabel={`${notification.title}. ${notification.body}`} onPress={() => open(notification)} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
           <Card style={{ flexDirection: "row", alignItems: "flex-start", gap: theme.spacing.md, backgroundColor: notification.read_at ? theme.colors.surface : theme.colors.primaryMuted }}>
             <View style={{ width: 40, height: 40, borderRadius: theme.radius.md, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surface }}><Feather name={iconFor(notification.kind)} size={19} color={theme.colors.primary} /></View>
-            <View style={{ flex: 1, gap: 4 }}><View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.xs }}>{!notification.read_at ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: theme.colors.primary }} /> : null}<Text variant="bodyStrong" style={{ flex: 1 }}>{notification.title}</Text><Text variant="caption" color="muted">{dateLabel(notification.created_at)}</Text></View><Text color="muted">{notification.body}</Text></View>
-            <Feather name="chevron-right" size={19} color={theme.colors.textMuted} />
+            <View style={{ flex: 1, minWidth: 0, gap: theme.spacing.xs }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "flex-start",
+                  gap: theme.spacing.xs,
+                }}
+              >
+                {!notification.read_at ? (
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      marginTop: 8,
+                      borderRadius: 4,
+                      backgroundColor: theme.colors.primary,
+                    }}
+                  />
+                ) : null}
+                <Text variant="bodyStrong" style={{ flex: 1 }}>
+                  {notification.title}
+                </Text>
+              </View>
+              <Text variant="caption" color="muted">
+                {dateLabel(notification.created_at)}
+              </Text>
+              <Text color="muted">{notification.body}</Text>
+            </View>
+            <Feather
+              name="chevron-right"
+              size={19}
+              color={theme.colors.textMuted}
+              style={{ marginTop: 2 }}
+            />
           </Card>
         </Pressable>)}
       </View>
